@@ -52,7 +52,7 @@ class QueuePaginationView(discord.ui.View):
         )
         
         for i, track in enumerate(self.all_tracks[start_idx:end_idx], start=start_idx + 1):
-            duration_min, duration_sec = divmod(track.duration, 60)
+            duration_min, duration_sec = divmod(int(track.duration), 60)
             current_marker = "▶️ " if i - 1 == self.current_index else ""
             embed.add_field(
                 name=f"{current_marker}{i}. {track.title}",
@@ -60,7 +60,7 @@ class QueuePaginationView(discord.ui.View):
                 inline=False
             )
         
-        total_duration = sum(t.duration for t in self.all_tracks)
+        total_duration = sum(int(t.duration) for t in self.all_tracks)
         duration_hours = total_duration // 3600
         duration_mins = (total_duration % 3600) // 60
         
