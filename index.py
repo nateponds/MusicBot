@@ -3,12 +3,13 @@ Discord Music Bot - Main Bot File
 """
 import discord
 from discord.ext import commands, tasks
+import asyncio
 import logging
 import os
 import shutil
 from pathlib import Path
 from config import Config
-from src.player import MusicPlayer
+from src.player import MusicPlayer, resolve_ffmpeg
 from src.logger import setup_logging, get_logger
 from src.embeds import MusicEmbedManager
 from src.cache import AudioCache
@@ -223,9 +224,22 @@ async def main():
         await EventHandlers.on_ready(bot)
         await bot.tree.sync()  # Sync slash commands
         logger.info("Synced slash commands")
-        logger.info("FFmpeg on PATH: %s", bool(shutil.which("ffmpeg")))
         logger.info("Opus loaded: %s", discord.opus.is_loaded())
     
+    resolution = await asyncio.to_thread(resolve_ffmpeg)
+    if resolution is None:
+        raise RuntimeError(
+            "No working FFmpeg with libopus support was found. "
+            "Run the platform installation steps in INSTALL.md."
+        )
+    bot.ffmpeg_resolution = resolution
+    logger.info(
+        "Validated FFmpeg: source=%s path=%s version=%s",
+        resolution.source,
+        resolution.executable,
+        resolution.version,
+    )
+
     # Load cogs
     await load_cogs(bot)
     

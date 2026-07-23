@@ -6,8 +6,12 @@ import asyncio
 import logging
 import shutil
 import os
+import sys
+import subprocess
+import functools
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional, Dict, Iterator
 from .queue import Queue, Track
 from .providers import YouTubeProvider, SpotifyProvider
 from .cache import AudioCache
@@ -17,44 +21,165 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 
-def find_ffmpeg_executable() -> Optional[str]:
-    """Locate ffmpeg on PATH, in imageio-ffmpeg package, or common system install locations."""
-    # 1. Check PATH (system or manually installed FFmpeg)
-    ffmpeg_path = shutil.which("ffmpeg")
-    if ffmpeg_path:
-        return ffmpeg_path
+@dataclass(frozen=True)
+class FFmpegCandidate:
+    executable: str
+    source: str
+    bundled: bool = False
 
-    # 2. Check imageio-ffmpeg package (bundled Python package)
+
+@dataclass(frozen=True)
+class FFmpegResolution:
+    executable: str
+    source: str
+    version: str
+
+
+def _iter_ffmpeg_candidates() -> Iterator[FFmpegCandidate]:
+    candidates: list[FFmpegCandidate] = []
+    if Config.FFMPEG_EXECUTABLE:
+        candidates.append(FFmpegCandidate(Config.FFMPEG_EXECUTABLE, "configured"))
+
+    path_candidate = shutil.which("ffmpeg")
+    if path_candidate:
+        candidates.append(FFmpegCandidate(path_candidate, "path"))
+
+    if sys.platform == "win32":
+        local_app_data = os.getenv("LOCALAPPDATA")
+        if local_app_data:
+            winget_root = Path(local_app_data) / "Microsoft" / "WinGet" / "Packages"
+            if winget_root.exists():
+                try:
+                    candidates.extend(
+                        FFmpegCandidate(str(path), "winget")
+                        for path in winget_root.rglob("ffmpeg.exe")
+                    )
+                except Exception:
+                    logger.debug("WinGet search failed", exc_info=True)
+        candidates.extend(
+            FFmpegCandidate(str(path), "program-files")
+            for path in (
+                Path(os.getenv("ProgramFiles", r"C:\Program Files")) / "ffmpeg" / "bin" / "ffmpeg.exe",
+                Path(os.getenv("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "ffmpeg" / "bin" / "ffmpeg.exe",
+            )
+            if path.exists()
+        )
+    elif sys.platform.startswith("linux"):
+        candidates.extend(
+            FFmpegCandidate(str(path), "system-path")
+            for path in (Path("/usr/local/bin/ffmpeg"), Path("/usr/bin/ffmpeg"))
+            if path.exists()
+        )
+
     try:
         import imageio_ffmpeg
-        ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
-        if ffmpeg_path and Path(ffmpeg_path).exists():
-            return ffmpeg_path
-    except (ImportError, AttributeError, FileNotFoundError):
-        pass
+        bundled = imageio_ffmpeg.get_ffmpeg_exe()
+        if bundled and Path(bundled).exists():
+            if sys.platform.startswith("linux"):
+                logger.warning(
+                    "imageio-ffmpeg candidate (%s) is a last-resort fallback on Linux; system FFmpeg is strongly recommended",
+                    bundled,
+                )
+            candidates.append(FFmpegCandidate(bundled, "imageio", bundled=True))
+    except (ImportError, AttributeError, FileNotFoundError, RuntimeError, OSError):
+        logger.debug("imageio-ffmpeg candidate is unavailable", exc_info=True)
 
-    # 3. Check Windows common installation locations
-    local_app_data = os.getenv("LOCALAPPDATA")
-    if local_app_data:
-        winget_packages = Path(local_app_data) / "Microsoft" / "WinGet" / "Packages"
-        if winget_packages.exists():
-            for candidate in winget_packages.rglob("ffmpeg.exe"):
-                return str(candidate)
+    seen: set[str] = set()
+    for candidate in candidates:
+        try:
+            key = os.path.normcase(os.path.abspath(candidate.executable))
+        except Exception:
+            key = candidate.executable
+        if key not in seen:
+            seen.add(key)
+            yield candidate
 
-    program_files_candidates = [
-        Path(os.getenv("ProgramFiles", r"C:\Program Files")) / "ffmpeg" / "bin" / "ffmpeg.exe",
-        Path(os.getenv("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "ffmpeg" / "bin" / "ffmpeg.exe",
-    ]
-    for candidate in program_files_candidates:
-        if candidate.exists():
-            return str(candidate)
 
+def validate_ffmpeg_candidate(candidate: FFmpegCandidate) -> Optional[FFmpegResolution]:
+    logger.debug("Validating FFmpeg candidate [%s]: %s", candidate.source, candidate.executable)
+    try:
+        version_result = subprocess.run(
+            [candidate.executable, "-hide_banner", "-version"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if version_result.returncode != 0:
+            logger.warning(
+                "FFmpeg candidate [%s] -version failed with returncode %s: %s",
+                candidate.source,
+                version_result.returncode,
+                version_result.stderr.strip()[:200],
+            )
+            return None
+
+        version_line = version_result.stdout.splitlines()[0] if version_result.stdout else "unknown"
+
+        codec_result = subprocess.run(
+            [
+                candidate.executable,
+                "-hide_banner",
+                "-loglevel", "error",
+                "-f", "lavfi",
+                "-i", "anullsrc=r=48000:cl=stereo",
+                "-t", "0.1",
+                "-c:a", "libopus",
+                "-f", "opus",
+                "-",
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=10,
+            check=False,
+        )
+        if codec_result.returncode != 0:
+            logger.warning(
+                "FFmpeg candidate [%s] opus probe failed with returncode %s: %s",
+                candidate.source,
+                codec_result.returncode,
+                codec_result.stderr.strip()[:200],
+            )
+            return None
+
+        return FFmpegResolution(
+            executable=candidate.executable,
+            source=candidate.source,
+            version=version_line,
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("FFmpeg candidate [%s] timed out during validation", candidate.source)
+        return None
+    except (OSError, PermissionError) as e:
+        logger.warning("FFmpeg candidate [%s] validation error: %s", candidate.source, e)
+        return None
+    except Exception as e:
+        logger.warning("FFmpeg candidate [%s] unexpected validation failure: %s", candidate.source, e, exc_info=True)
+        return None
+
+
+@functools.lru_cache(maxsize=1)
+def resolve_ffmpeg() -> Optional[FFmpegResolution]:
+    """Deterministically resolve and validate an FFmpeg executable candidate."""
+    for candidate in _iter_ffmpeg_candidates():
+        res = validate_ffmpeg_candidate(candidate)
+        if res is not None:
+            return res
     return None
+
+
+def find_ffmpeg_executable() -> Optional[str]:
+    """Locate ffmpeg executable using deterministic resolution."""
+    res = resolve_ffmpeg()
+    return res.executable if res else None
 
 
 class MusicPlayer:
     """Main music player service"""
-    
+
     def __init__(self, bot):
         self.bot = bot
         self.queue = Queue()
