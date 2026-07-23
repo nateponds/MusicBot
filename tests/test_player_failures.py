@@ -360,7 +360,7 @@ async def test_repeat_one_failure_non_zero_index(mock_music_player):
 
     with patch("src.player.find_ffmpeg_executable", return_value="/usr/bin/ffmpeg"), \
          patch("discord.FFmpegOpusAudio.from_probe", side_effect=fake_probe):
-        await player.play_next(ignore_repeat=True)
+        await player.play_next(skip_track_repeat=True)
 
     assert player._state == PlaybackState.PLAYING
     assert player.current_track is not None
@@ -679,3 +679,126 @@ async def test_disconnect_during_preparation(mock_music_player):
     assert player._state == PlaybackState.IDLE
     assert player.current_track is None
     assert player.voice_client is None
+
+
+@pytest.mark.asyncio
+async def test_queue_repeat_broken_last_recovers_to_good_first(mock_music_player):
+    """Regression test 1: Queue [good-first, broken-last], current index 0, queue-repeat enabled: broken-last fails and recovery plays good-first."""
+    player = GuildPlayer(guild_id=1, music_player=mock_music_player)
+    player.voice_client = CapturingVoiceClient()
+    t_good = make_track("good-first")
+    t_broken = make_track("broken-last")
+    await player.queue.add(t_good)
+    await player.queue.add(t_broken)
+
+    player.queue.current_index = 0
+    player.queue.loop_mode = 2  # Queue repeat enabled
+
+    mock_music_player.youtube.get_stream_url = AsyncMock(return_value="http://stream")
+
+    async def fake_probe(url, **kwargs):
+        if player.queue.current_index == 1:
+            raise RuntimeError("broken-last probe error")
+        return FakeAudioSource()
+
+    with patch("src.player.find_ffmpeg_executable", return_value="/usr/bin/ffmpeg"), \
+         patch("discord.FFmpegOpusAudio.from_probe", side_effect=fake_probe):
+        await player.play_next()
+
+    assert player._state == PlaybackState.PLAYING
+    assert player.current_track is not None
+    assert player.current_track.title == "good-first"
+    assert player.queue.current_index == 0
+
+
+@pytest.mark.asyncio
+async def test_queue_repeat_every_track_broken_attempts_queue_size(mock_music_player):
+    """Regression test 2: Every track broken under queue-repeat: exactly queue-size preparation attempts, then IDLE."""
+    player = GuildPlayer(guild_id=1, music_player=mock_music_player)
+    player.voice_client = CapturingVoiceClient()
+    queue_size = 4
+    for i in range(queue_size):
+        await player.queue.add(make_track(f"broken_{i}"))
+
+    player.queue.loop_mode = 2  # Queue repeat enabled
+
+    mock_music_player.youtube.get_stream_url = AsyncMock(return_value="http://stream")
+
+    attempts_count = 0
+
+    async def failing_probe(url, **kwargs):
+        nonlocal attempts_count
+        attempts_count += 1
+        raise RuntimeError("probe error")
+
+    with patch("src.player.find_ffmpeg_executable", return_value="/usr/bin/ffmpeg"), \
+         patch("discord.FFmpegOpusAudio.from_probe", side_effect=failing_probe):
+        await player.play_next()
+
+    assert attempts_count == queue_size
+    assert player._state == PlaybackState.IDLE
+    assert player.current_track is None
+
+
+@pytest.mark.asyncio
+async def test_queue_repeat_runtime_failure_final_track_wraps_to_first(mock_music_player):
+    """Regression test 3: Runtime failure on the final active track under queue-repeat: recovery wraps to the first track."""
+    player = GuildPlayer(guild_id=1, music_player=mock_music_player)
+    vc = CapturingVoiceClient()
+    player.voice_client = vc
+    t0 = make_track("t0_first")
+    t1_last = make_track("t1_last_broken_runtime")
+    await player.queue.add(t0)
+    await player.queue.add(t1_last)
+    player.queue.loop_mode = 2  # Queue repeat
+
+    player.queue.current_index = 0
+
+    mock_music_player.youtube.get_stream_url = AsyncMock(return_value="http://stream")
+
+    with patch("src.player.find_ffmpeg_executable", return_value="/usr/bin/ffmpeg"), \
+         patch("discord.FFmpegOpusAudio.from_probe", return_value=FakeAudioSource()):
+        await player.play_next()
+
+    assert player.current_track == t1_last
+    assert player.queue.current_index == 1
+    gen = player._generation
+    vc.is_playing_flag = False
+
+    with patch("src.player.find_ffmpeg_executable", return_value="/usr/bin/ffmpeg"), \
+         patch("discord.FFmpegOpusAudio.from_probe", return_value=FakeAudioSource()):
+        await player._finish_playback(gen, RuntimeError("Decoder crash on final track"))
+
+    assert player.current_track is not None
+    assert player.current_track.title == "t0_first"
+    assert player.queue.current_index == 0
+    assert player._state == PlaybackState.PLAYING
+
+
+@pytest.mark.asyncio
+async def test_repeat_one_recovery_skips_failed_track(mock_music_player):
+    """Regression test 4: Existing repeat-one recovery still skips the failed track."""
+    player = GuildPlayer(guild_id=1, music_player=mock_music_player)
+    player.voice_client = CapturingVoiceClient()
+    t_broken = make_track("t0_broken")
+    t_good = make_track("t1_good")
+    await player.queue.add(t_broken)
+    await player.queue.add(t_good)
+
+    player.queue.loop_mode = 1  # Repeat-one enabled
+
+    mock_music_player.youtube.get_stream_url = AsyncMock(return_value="http://stream")
+
+    async def fake_probe(url, **kwargs):
+        if player.queue.current_index == 0:
+            raise RuntimeError("t0 broken probe error")
+        return FakeAudioSource()
+
+    with patch("src.player.find_ffmpeg_executable", return_value="/usr/bin/ffmpeg"), \
+         patch("discord.FFmpegOpusAudio.from_probe", side_effect=fake_probe):
+        await player.play_next()
+
+    assert player._state == PlaybackState.PLAYING
+    assert player.current_track is not None
+    assert player.current_track.title == "t1_good"
+    assert player.queue.current_index == 1

@@ -96,26 +96,32 @@ class Queue:
                 return self.tracks[self.current_index]
         return None
 
-    async def get_next(self, ignore_repeat: bool = False) -> Optional[Track]:
+    async def get_next(self, skip_track_repeat: bool = False) -> Optional[Track]:
         """Get next track"""
         async with self._lock:
             if not self.tracks:
                 return None
 
-            if self.loop_mode == 1 and not ignore_repeat:  # Track repeat
-                if self.current_index < 0:
-                    self.current_index = 0
-                if 0 <= self.current_index < len(self.tracks):
-                    return self.tracks[self.current_index]
-                return None
-            elif self.loop_mode == 2 and not ignore_repeat:  # Queue repeat
-                if self.current_index + 1 >= len(self.tracks):
+            if self.loop_mode == 1:  # Track repeat
+                if not skip_track_repeat:
+                    if self.current_index < 0:
+                        self.current_index = 0
+                    if 0 <= self.current_index < len(self.tracks):
+                        return self.tracks[self.current_index]
+                    return None
+                else:
+                    if self.current_index + 1 < len(self.tracks):
+                        self.current_index += 1
+                        return self.tracks[self.current_index]
+                    return None
+            elif self.loop_mode == 2:  # Queue repeat
+                if self.current_index < 0 or self.current_index + 1 >= len(self.tracks):
                     self.current_index = 0
                     return self.tracks[0]
                 else:
                     self.current_index += 1
                     return self.tracks[self.current_index]
-            else:  # No loop or ignore_repeat
+            else:  # No loop
                 if self.current_index + 1 < len(self.tracks):
                     self.current_index += 1
                     return self.tracks[self.current_index]

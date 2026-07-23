@@ -309,7 +309,7 @@ class GuildPlayer:
                 loop_mode=self.queue.loop_mode,
             )
 
-    async def play_next(self, ignore_repeat: bool = False) -> None:
+    async def play_next(self, skip_track_repeat: bool = False) -> None:
         """Play next track in queue with serialized, non-recursive recovery."""
         async with self._advance_lock:
             async with self._state_lock:
@@ -333,8 +333,8 @@ class GuildPlayer:
                 if generation != self._generation:
                     return
 
-                should_ignore_repeat = ignore_repeat or len(failed_tracks) > 0
-                next_track = await self.queue.get_next(ignore_repeat=should_ignore_repeat)
+                should_skip_track_repeat = skip_track_repeat or len(failed_tracks) > 0
+                next_track = await self.queue.get_next(skip_track_repeat=should_skip_track_repeat)
 
                 if not next_track:
                     break
@@ -493,7 +493,7 @@ class GuildPlayer:
 
         if failed_track:
             try:
-                await self.play_next(ignore_repeat=True)
+                await self.play_next(skip_track_repeat=True)
             finally:
                 try:
                     await self._notify_playback_failures([failed_track])
