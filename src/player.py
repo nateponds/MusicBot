@@ -220,25 +220,25 @@ class MusicPlayer:
             Config.SPOTIFY_CLIENT_SECRET
         )
         self.cache = AudioCache()
-        
+
         # Per-guild players
         self.players: Dict[int, 'GuildPlayer'] = {}
         self.current_volume = Config.DEFAULT_VOLUME
-    
+
     def get_player(self, guild_id: int) -> 'GuildPlayer':
         """Get or create player for guild"""
         if guild_id not in self.players:
             self.players[guild_id] = GuildPlayer(guild_id, self)
         return self.players[guild_id]
-    
+
     async def search_youtube(self, query: str) -> list:
         """Search YouTube"""
         return await self.youtube.search(query, limit=5)
-    
+
     async def search_spotify(self, query: str) -> list:
         """Search Spotify"""
         return await self.spotify.search(query, limit=5)
-    
+
     async def play_youtube(self, url: str, ctx) -> Optional[Track]:
         """Play from YouTube URL"""
         player = self.get_player(ctx.guild.id)
@@ -252,12 +252,12 @@ class MusicPlayer:
             added_by_name=ctx.author.name,
         ))
         return player.queue.tracks[-1] if player.queue.tracks else None
-    
+
     async def set_volume(self, guild_id: int, volume: int) -> None:
         """Set player volume"""
         player = self.get_player(guild_id)
         player.volume = max(0, min(100, volume))
-    
+
     async def cleanup(self, guild_id: int) -> None:
         """Cleanup player for guild"""
         if guild_id in self.players:
@@ -280,7 +280,6 @@ class GuildPlayer:
         self._advance_lock = asyncio.Lock()
         self._generation = 0
         self._notification_channel = None
-        self.failed_recovery_tracks: list[Track] = []
 
     @property
     def is_playing(self) -> bool:
@@ -310,11 +309,17 @@ class GuildPlayer:
                 loop_mode=self.queue.loop_mode,
             )
 
-    async def play_next(self) -> None:
+    async def play_next(self, ignore_repeat: bool = False) -> None:
         """Play next track in queue with serialized, non-recursive recovery."""
         async with self._advance_lock:
-            if self._state is PlaybackState.PAUSED:
-                return
+            async with self._state_lock:
+                if self._state in {
+                    PlaybackState.PREPARING,
+                    PlaybackState.PLAYING,
+                    PlaybackState.PAUSED,
+                    PlaybackState.STOPPING,
+                }:
+                    return
 
             self._generation += 1
             generation = self._generation
@@ -328,11 +333,8 @@ class GuildPlayer:
                 if generation != self._generation:
                     return
 
-                # If repeat-one (loop_mode == 1) and we previously failed a track, skip it to avoid spinning.
-                if self.queue.loop_mode == 1 and failed_tracks:
-                    next_track = await self.queue.remove(0)
-                else:
-                    next_track = await self.queue.get_next()
+                should_ignore_repeat = ignore_repeat or len(failed_tracks) > 0
+                next_track = await self.queue.get_next(ignore_repeat=should_ignore_repeat)
 
                 if not next_track:
                     break
@@ -431,10 +433,12 @@ class GuildPlayer:
                     async with self._state_lock:
                         if generation == self._generation:
                             self._state = PlaybackState.PLAYING
-                    
+
                     if failed_tracks:
-                        self.failed_recovery_tracks.extend(failed_tracks)
-                        loop.create_task(self._notify_playback_failures(failed_tracks))
+                        try:
+                            await self._notify_playback_failures(failed_tracks)
+                        except Exception:
+                            pass
                     return
                 except Exception as e:
                     if source:
@@ -456,15 +460,14 @@ class GuildPlayer:
                     self._state = PlaybackState.IDLE
 
             if failed_tracks:
-                self.failed_recovery_tracks.extend(failed_tracks)
                 try:
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(self._notify_playback_failures(failed_tracks))
+                    await self._notify_playback_failures(failed_tracks)
                 except Exception:
                     pass
 
     async def _finish_playback(self, generation: int, error: Optional[Exception]) -> None:
         """Handle end of playback on the asyncio event loop."""
+        failed_track: Optional[Track] = None
         async with self._state_lock:
             if generation != self._generation:
                 logger.debug("Guild %s ignoring stale playback completion for gen %s (current: %s)",
@@ -479,14 +482,23 @@ class GuildPlayer:
                     "Guild %s runtime playback error: %s (exit code: %s)",
                     self.guild_id, type(error).__name__, error_code, exc_info=True,
                 )
+                failed_track = self.current_track
+                self._state = PlaybackState.RECOVERING
             else:
                 track_title = self.current_track.title if self.current_track else 'unknown'
                 logger.info("Guild %s finished track: %s", self.guild_id, track_title)
+                self._state = PlaybackState.IDLE
 
             self.current_track = None
-            self._state = PlaybackState.IDLE
 
-        await self.play_next()
+        if failed_track:
+            try:
+                await self._notify_playback_failures([failed_track])
+            except Exception:
+                pass
+            await self.play_next(ignore_repeat=True)
+        else:
+            await self.play_next()
 
     async def _notify_playback_failures(self, failed_tracks: list[Track]) -> None:
         """Send at most one notification summarizing skipped/failed tracks."""
