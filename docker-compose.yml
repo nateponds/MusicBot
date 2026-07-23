@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  discord-music-bot:
+    build: .
+    container_name: discord-music-bot
+    restart: unless-stopped
+    environment:
+      # Load from .env file in the working directory
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID}
+      - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET}
+      - GENIUS_ACCESS_TOKEN=${GENIUS_ACCESS_TOKEN}
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
+      - YTDLP_COOKIES_FROM_BROWSER=${YTDLP_COOKIES_FROM_BROWSER}
+      - YTDLP_COOKIES_BROWSER_PROFILE=${YTDLP_COOKIES_BROWSER_PROFILE}
+      - YTDLP_COOKIEFILE=${YTDLP_COOKIEFILE}
+      - DEFAULT_VOLUME=${DEFAULT_VOLUME}
+      - DEFAULT_LANGUAGE=${DEFAULT_LANGUAGE}
+      - PRIMARY_SOURCE=${PRIMARY_SOURCE}
+      - SUPPORTED_SOURCES=${SUPPORTED_SOURCES}
+      - VOICE_TIMEOUT=${VOICE_TIMEOUT}
+      - IDLE_DISCONNECT_TIME=${IDLE_DISCONNECT_TIME}
+      - DEBUG=${DEBUG:-false}
+    volumes:
+      # Mount .env from host (optional, for development)
+      - ./.env:/.env:ro
+      # Persistent storage for cache and logs
+      - ./cache:/app/cache
+      - ./logs:/app/logs
+    # No port mapping needed; bot uses Discord's voice gateway (UDP/TLS)
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import discord; print('ok')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
