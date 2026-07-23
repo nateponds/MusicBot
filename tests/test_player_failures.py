@@ -494,15 +494,23 @@ async def test_runtime_failure_advances_queue_before_notification_io(mock_music_
     with patch("src.player.find_ffmpeg_executable", return_value="/usr/bin/ffmpeg"), \
          patch("discord.FFmpegOpusAudio.from_probe", return_value=FakeAudioSource()):
         finish_task = asyncio.create_task(player._finish_playback(gen, RuntimeError("runtime error")))
+        try:
+            await asyncio.wait_for(send_started.wait(), timeout=5)
 
-        await send_started.wait()
+            # Prove second track reaches PLAYING while channel.send() is still blocked
+            assert player._state == PlaybackState.PLAYING
+            assert player.current_track == t2
 
-        # Prove second track reaches PLAYING while channel.send() is still blocked
-        assert player._state == PlaybackState.PLAYING
-        assert player.current_track == t2
-
-        send_block.set()
-        await finish_task
+            send_block.set()
+            await asyncio.wait_for(finish_task, timeout=5)
+        finally:
+            send_block.set()
+            if not finish_task.done():
+                finish_task.cancel()
+                try:
+                    await finish_task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
     assert channel.send.called
 
@@ -874,3 +882,171 @@ async def test_finish_playback_logs_exception_without_traceback(mock_music_playe
     assert "1" in caplog.text
     assert "NoneType: None" not in caplog.text
     assert "Traceback" not in caplog.text
+
+
+# --- Skip / previous under track-repeat, and exceptional-advance notification ---
+
+
+async def _play_first(player):
+    """Start the first queued track so current_track/index are set."""
+    with patch("src.player.find_ffmpeg_executable", return_value="/usr/bin/ffmpeg"), \
+         patch("discord.FFmpegOpusAudio.from_probe", return_value=FakeAudioSource()):
+        await player.play_next()
+
+
+@pytest.mark.asyncio
+async def test_skip_under_track_repeat_advances(mock_music_player):
+    player = GuildPlayer(guild_id=1, music_player=mock_music_player)
+    player.voice_client = CapturingVoiceClient()
+    mock_music_player.youtube.get_stream_url = AsyncMock(return_value="http://stream")
+
+    t0, t1 = make_track("t0"), make_track("t1")
+    await player.queue.add(t0)
+    await player.queue.add(t1)
+    player.queue.set_loop_mode(1)  # track repeat
+
+    await _play_first(player)
+    assert player.current_track is t0
+    assert player.queue.current_index == 0
+
+    player.voice_client.is_playing_flag = True
+    with patch("src.player.find_ffmpeg_executable", return_value="/usr/bin/ffmpeg"), \
+         patch("discord.FFmpegOpusAudio.from_probe", return_value=FakeAudioSource()):
+        result = await player.skip()
+
+    assert result is t1
+    assert player.current_track is t1
+    assert player.queue.current_index == 1
+
+
+@pytest.mark.asyncio
+async def test_skip_under_track_repeat_single_item_goes_idle(mock_music_player):
+    player = GuildPlayer(guild_id=1, music_player=mock_music_player)
+    player.voice_client = CapturingVoiceClient()
+    mock_music_player.youtube.get_stream_url = AsyncMock(return_value="http://stream")
+
+    t0 = make_track("only")
+    await player.queue.add(t0)
+    player.queue.set_loop_mode(1)  # track repeat
+
+    await _play_first(player)
+    assert player.current_track is t0
+
+    player.voice_client.is_playing_flag = True
+    with patch("src.player.find_ffmpeg_executable", return_value="/usr/bin/ffmpeg"), \
+         patch("discord.FFmpegOpusAudio.from_probe", return_value=FakeAudioSource()):
+        result = await player.skip()
+
+    assert result is None
+    assert player._state == PlaybackState.IDLE
+    assert player.current_track is None
+
+
+@pytest.mark.asyncio
+async def test_previous_under_track_repeat_from_index_2(mock_music_player):
+    player = GuildPlayer(guild_id=1, music_player=mock_music_player)
+    player.voice_client = CapturingVoiceClient()
+    mock_music_player.youtube.get_stream_url = AsyncMock(return_value="http://stream")
+
+    t0, t1, t2 = make_track("t0"), make_track("t1"), make_track("t2")
+    for t in (t0, t1, t2):
+        await player.queue.add(t)
+    player.queue.current_index = 2
+    player.queue.set_loop_mode(1)  # track repeat
+
+    player.voice_client.is_playing_flag = True
+    with patch("src.player.find_ffmpeg_executable", return_value="/usr/bin/ffmpeg"), \
+         patch("discord.FFmpegOpusAudio.from_probe", return_value=FakeAudioSource()):
+        result = await player.previous()
+
+    assert result is t1
+    assert player.current_track is t1
+    assert player.queue.current_index == 1
+
+
+@pytest.mark.asyncio
+async def test_previous_under_track_repeat_from_index_1(mock_music_player):
+    player = GuildPlayer(guild_id=1, music_player=mock_music_player)
+    player.voice_client = CapturingVoiceClient()
+    mock_music_player.youtube.get_stream_url = AsyncMock(return_value="http://stream")
+
+    t0, t1 = make_track("t0"), make_track("t1")
+    await player.queue.add(t0)
+    await player.queue.add(t1)
+    player.queue.current_index = 1
+    player.queue.set_loop_mode(1)  # track repeat
+
+    player.voice_client.is_playing_flag = True
+    with patch("src.player.find_ffmpeg_executable", return_value="/usr/bin/ffmpeg"), \
+         patch("discord.FFmpegOpusAudio.from_probe", return_value=FakeAudioSource()):
+        result = await player.previous()
+
+    assert result is t0
+    assert player.current_track is t0
+    assert player.queue.current_index == 0
+
+
+@pytest.mark.asyncio
+async def test_stale_callback_after_skip_does_not_clear_new_track(mock_music_player):
+    player = GuildPlayer(guild_id=1, music_player=mock_music_player)
+    player.voice_client = CapturingVoiceClient()
+    mock_music_player.youtube.get_stream_url = AsyncMock(return_value="http://stream")
+
+    t0, t1 = make_track("t0"), make_track("t1")
+    await player.queue.add(t0)
+    await player.queue.add(t1)
+
+    await _play_first(player)
+    stale_gen = player._generation
+
+    player.voice_client.is_playing_flag = True
+    with patch("src.player.find_ffmpeg_executable", return_value="/usr/bin/ffmpeg"), \
+         patch("discord.FFmpegOpusAudio.from_probe", return_value=FakeAudioSource()):
+        await player.skip()
+
+    assert player.current_track is t1
+
+    # Stale callback from the skipped track must be a no-op.
+    await player._finish_playback(stale_gen, None)
+    assert player.current_track is t1
+    assert player._state == PlaybackState.PLAYING
+
+
+@pytest.mark.asyncio
+async def test_finish_playback_propagates_cancellation_without_notifying(mock_music_player):
+    player = GuildPlayer(guild_id=1, music_player=mock_music_player)
+    player.current_track = make_track("failed")
+    player._state = PlaybackState.PLAYING
+    gen = player._generation
+
+    channel = AsyncMock()
+    player.set_notification_channel(channel)
+
+    async def cancel(*a, **k):
+        raise asyncio.CancelledError()
+
+    with patch.object(player, "play_next", side_effect=cancel):
+        with pytest.raises(asyncio.CancelledError):
+            await player._finish_playback(gen, RuntimeError("boom"))
+
+    channel.send.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_finish_playback_propagates_runtime_error_without_notifying(mock_music_player):
+    player = GuildPlayer(guild_id=1, music_player=mock_music_player)
+    player.current_track = make_track("failed")
+    player._state = PlaybackState.PLAYING
+    gen = player._generation
+
+    channel = AsyncMock()
+    player.set_notification_channel(channel)
+
+    async def boom(*a, **k):
+        raise RuntimeError("advance failed")
+
+    with patch.object(player, "play_next", side_effect=boom):
+        with pytest.raises(RuntimeError, match="advance failed"):
+            await player._finish_playback(gen, RuntimeError("orig"))
+
+    channel.send.assert_not_called()

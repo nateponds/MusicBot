@@ -501,13 +501,13 @@ class GuildPlayer:
             self.current_track = None
 
         if failed_track:
+            # Advance first; notify only if play_next returned normally. A raise
+            # (including CancelledError) propagates without a false "continued" notice.
+            await self.play_next(skip_track_repeat=True)
             try:
-                await self.play_next(skip_track_repeat=True)
-            finally:
-                try:
-                    await self._notify_playback_failures([failed_track])
-                except Exception:
-                    pass
+                await self._notify_playback_failures([failed_track])
+            except Exception:
+                pass
         else:
             await self.play_next()
 
@@ -564,11 +564,18 @@ class GuildPlayer:
             self._state = PlaybackState.IDLE
 
     async def skip(self) -> Optional[Track]:
-        """Skip currently playing track"""
+        """Skip currently playing track.
+
+        Overrides track-repeat so /skip advances to the next queue item instead
+        of replaying the current one. Queue-repeat and normal-loop are unchanged.
+        """
+        # Override only track-repeat; let queue-repeat wrap as usual.
+        override_repeat = self.queue.loop_mode == 1
+
         async with self._state_lock:
             self._generation += 1
 
-        next_track = await self.queue.peek_next()
+        next_track = await self.queue.peek_next(skip_track_repeat=override_repeat)
 
         if self.voice_client and (self.voice_client.is_playing() or self.voice_client.is_paused()):
             self.voice_client.stop()
@@ -577,7 +584,10 @@ class GuildPlayer:
             self.current_track = None
             self._state = PlaybackState.IDLE
 
-        await self.play_next()
+        if next_track is None:
+            return None
+
+        await self.play_next(skip_track_repeat=override_repeat)
         return next_track
 
     async def previous(self) -> Optional[Track]:
@@ -595,7 +605,9 @@ class GuildPlayer:
             self._state = PlaybackState.IDLE
 
         if prev_track:
-            await self.play_next()
+            # skip_track_repeat so play_next honors the cursor prepare_previous set
+            # instead of replaying the current track under track-repeat.
+            await self.play_next(skip_track_repeat=True)
         return prev_track
 
     async def disconnect(self) -> None:

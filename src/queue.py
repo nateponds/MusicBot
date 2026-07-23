@@ -127,13 +127,17 @@ class Queue:
                     return self.tracks[self.current_index]
         return None
 
-    async def peek_next(self) -> Optional[Track]:
-        """Peek the next track without moving queue state"""
+    async def peek_next(self, skip_track_repeat: bool = False) -> Optional[Track]:
+        """Peek the next track without moving queue state.
+
+        skip_track_repeat previews the track that get_next(skip_track_repeat=True)
+        would return, so /skip can see past a track-repeat loop.
+        """
         async with self._lock:
-            if self.loop_mode == 1:  # Track repeat
+            if self.loop_mode == 1 and not skip_track_repeat:  # Track repeat
                 if 0 <= self.current_index < len(self.tracks):
                     return self.tracks[self.current_index]
-            elif self.loop_mode == 2:  # Queue repeat
+            elif self.loop_mode == 2 and not skip_track_repeat:  # Queue repeat
                 if self.current_index + 1 >= len(self.tracks):
                     if len(self.tracks) > 0:
                         return self.tracks[0]
