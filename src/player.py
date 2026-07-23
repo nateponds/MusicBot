@@ -144,29 +144,22 @@ class GuildPlayer:
                 self.is_playing = False
                 return
 
-            ffmpeg_path = find_ffmpeg_executable()
-            if not ffmpeg_path:
-                logger.error("Guild %s: FFmpeg is required for voice playback but was not found. "
-                           "On Linux, install with: sudo apt install ffmpeg libopus0 libopus-dev", 
-                           self.guild_id)
-                self.current_track = None
-                self.is_playing = False
-                await self.play_next()
-                return
-            
-            logger.info("Guild %s using FFmpeg at %s", self.guild_id, ffmpeg_path)
-
-            stream_url = await self.music_player.youtube.get_stream_url(next_track.url)
-            if not stream_url:
-                logger.error("Guild %s: Could not resolve stream URL for %s", self.guild_id, next_track.url)
-                self.current_track = None
-                self.is_playing = False
-                await self.play_next()
-                return
-
-            logger.info("Guild %s stream URL resolved", self.guild_id)
-
             try:
+                ffmpeg_path = find_ffmpeg_executable()
+                if not ffmpeg_path:
+                    raise RuntimeError(
+                        "FFmpeg is required for voice playback but was not found. "
+                        "On Linux, install: sudo apt install ffmpeg libopus0 libopus-dev"
+                    )
+                logger.info("Guild %s using FFmpeg at %s", self.guild_id, ffmpeg_path)
+
+                stream_url = await self.music_player.youtube.get_stream_url(next_track.url)
+                if not stream_url:
+                    raise RuntimeError(f"Could not resolve stream URL for {next_track.url}")
+                logger.info("Guild %s stream URL resolved", self.guild_id)
+
+                # from_probe runs the FFmpeg binary; an incompatible binary can
+                # fail or segfault before the playback callback is registered.
                 source = await discord.FFmpegOpusAudio.from_probe(
                     stream_url,
                     method="fallback",
@@ -176,13 +169,14 @@ class GuildPlayer:
             except Exception as e:
                 error_code = getattr(e, 'returncode', 'N/A')
                 logger.error(
-                    "Guild %s: FFmpeg probe error for '%s' - %s (exit code: %s). "
-                    "If exit code is -11 (SIGSEGV), use system FFmpeg: sudo apt install ffmpeg libopus0 libopus-dev",
+                    "Guild %s failed to prepare '%s': %s (exit code: %s). "
+                    "If the exit code is -11 (SIGSEGV), install system FFmpeg: "
+                    "sudo apt install ffmpeg libopus0 libopus-dev",
                     self.guild_id,
                     next_track.title,
-                    type(e).__name__,
+                    e,
                     error_code,
-                    exc_info=logger.isEnabledFor(logging.DEBUG)
+                    exc_info=True,
                 )
                 self.current_track = None
                 self.is_playing = False

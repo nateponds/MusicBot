@@ -2,12 +2,25 @@
 
 ## 🚀 Quick Setup (2 minutes)
 
-### 1. Prerequisites Check
+### 1. Install OS Prerequisites
+
+Linux (Debian/Ubuntu):
+
+```bash
+sudo apt update
+sudo apt install -y python3 python3-venv python3-pip git ffmpeg libopus0 libopus-dev
+python3 --version  # Should be 3.11+
+```
+
+Windows PowerShell:
+
 ```bash
 python --version  # Should be 3.11+
 ```
 
-**That's it!** FFmpeg and Opus are now bundled as Python packages (`imageio-ffmpeg` and `opuslib`), so no system dependencies are needed.
+The Python dependencies include an FFmpeg fallback, but Linux hosts should use
+system FFmpeg and Opus. The bundled FFmpeg binary can be incompatible with
+newer Linux distributions.
 
 ### 2. Install Dependencies
 ```bash

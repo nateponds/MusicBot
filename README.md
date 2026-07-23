@@ -47,10 +47,10 @@ A slash-command Discord music bot with YouTube and Spotify support, queue manage
 
 See [INSTALL.md](INSTALL.md) for full Windows and Linux setup instructions.
 
-**Simplified installation** (no FFmpeg or Opus system dependency needed):
-
 Quick start on Linux:
 ```bash
+sudo apt update
+sudo apt install -y python3 python3-venv python3-pip git ffmpeg libopus0 libopus-dev
 ./install.sh --run
 ```
 
@@ -59,7 +59,10 @@ Quick start on Windows PowerShell:
 PowerShell -ExecutionPolicy Bypass -File install.ps1 -Run
 ```
 
-**Why simplified?** FFmpeg and Opus are now bundled as Python packages (`imageio-ffmpeg` and `opuslib`), so you only need Python 3.11+ installed!
+On Windows, `imageio-ffmpeg` provides a bundled FFmpeg fallback and the
+installer installs the required Python packages. On Linux, install the system
+FFmpeg and Opus packages shown above. The bundled FFmpeg fallback can be
+incompatible with some Linux distributions, including Ubuntu 24.04+.
 
 ## Configuration
 
@@ -117,7 +120,7 @@ requirements.txt Python dependencies
 - **Logs** (`logs/bot.log`):
   - Rotating file handler keeps 7 days of logs
   - New log file each day, old ones auto-deleted after 7 days
-- The bot uses `ffmpeg` and Discord voice support, so make sure those system dependencies are installed.
+- On Linux, the bot requires system `ffmpeg` and `libopus` for reliable Discord voice playback.
 - **Spotify Support**: 
   - **Individual tracks** work with any Spotify account (free or premium)
   - **Playlists & Albums** require a PREMIUM Spotify account for direct API access

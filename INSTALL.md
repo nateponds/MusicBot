@@ -13,7 +13,8 @@ This guide covers final, tested steps to install and run the Discord Music Bot o
 sudo apt update && sudo apt install -y ffmpeg libopus0 libopus-dev
 ```
 
-**Windows & macOS**: Bundled packages are fine; no system installation needed.
+**Windows**: The bundled FFmpeg fallback is normally sufficient. **macOS**:
+install FFmpeg and Opus with Homebrew as shown in the macOS section.
 
 ---
 
@@ -21,6 +22,8 @@ sudo apt update && sudo apt install -y ffmpeg libopus0 libopus-dev
 - **Linux**: `./install.sh` (checks for system FFmpeg), then `sudo ./install.sh --systemd` for persistent service.
 - **Windows**: `.\install.ps1 -Run` for quick testing, or `.\install.ps1` to set up with Task Scheduler.
 - **Python**: 3.11+ required on all platforms.
+- **Python audio packages**: `imageio-ffmpeg` supplies an FFmpeg fallback;
+  `opuslib` is a Python binding, not a replacement for Linux's native Opus runtime.
 
 ---
 
@@ -165,6 +168,9 @@ sudo journalctl -u discord-music-bot -n 50 --no-pager
 ### A. Install Python
 
 Install Python 3.11+ from [python.org](https://python.org). **Ensure "Add Python to PATH" is checked during installation.**
+
+The Python requirements provide a bundled FFmpeg fallback, so a separate
+FFmpeg installation is normally unnecessary on Windows.
 
 **Verify:**
 ```powershell

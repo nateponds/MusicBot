@@ -88,7 +88,7 @@ After=network.target
 Type=simple
 User=$BOT_USER
 WorkingDirectory=$REPO_DIR
-Environment="PATH=$VENV_DIR/bin"
+Environment="PATH=$VENV_DIR/bin:/usr/local/bin:/usr/bin:/bin"
 ExecStart=$VENV_DIR/bin/python $REPO_DIR/index.py
 Restart=on-failure
 RestartSec=10
