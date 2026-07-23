@@ -92,7 +92,7 @@ class FakeVoiceClient:
 async def test_guild_player_initial_state():
     mp = MagicMock(spec=MusicPlayer)
     player = GuildPlayer(guild_id=1, music_player=mp)
-    
+
     snapshot = await player.snapshot()
     assert snapshot.state == PlaybackState.IDLE
     assert snapshot.track is None

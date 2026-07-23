@@ -31,7 +31,7 @@ def test_candidate_data_structures():
 
 def test_iter_ffmpeg_candidates_order(monkeypatch):
     monkeypatch.setattr(Config, "FFMPEG_EXECUTABLE", "/custom/ffmpeg")
-    
+
     def fake_exists(self):
         return str(self).replace("\\", "/") in ["/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg", "/bundled/ffmpeg"]
 
@@ -39,7 +39,7 @@ def test_iter_ffmpeg_candidates_order(monkeypatch):
          patch("src.player.sys.platform", "linux"), \
          patch("pathlib.Path.exists", fake_exists), \
          patch("imageio_ffmpeg.get_ffmpeg_exe", return_value="/bundled/ffmpeg"):
-        
+
         candidates = list(_iter_ffmpeg_candidates())
         sources = [c.source for c in candidates]
         execs = [c.executable for c in candidates]
@@ -51,7 +51,7 @@ def test_iter_ffmpeg_candidates_order(monkeypatch):
 
 def test_validate_ffmpeg_candidate_success():
     candidate = FFmpegCandidate(executable="/usr/bin/ffmpeg", source="path")
-    
+
     version_res = MagicMock(returncode=0, stdout="ffmpeg version 6.1.1\nbuilt with gcc", stderr="")
     codec_res = MagicMock(returncode=0, stdout="", stderr="")
 
@@ -70,7 +70,7 @@ def test_validate_ffmpeg_candidate_success():
 
 def test_validate_ffmpeg_candidate_sigsegv_returncode_minus_11():
     candidate = FFmpegCandidate(executable="/bundled/ffmpeg", source="imageio", bundled=True)
-    
+
     def fake_run(cmd, **kwargs):
         if "-version" in cmd:
             return MagicMock(returncode=-11, stdout="", stderr="Segmentation fault")
@@ -83,7 +83,7 @@ def test_validate_ffmpeg_candidate_sigsegv_returncode_minus_11():
 
 def test_validate_ffmpeg_candidate_nonzero_returncode():
     candidate = FFmpegCandidate(executable="/usr/bin/ffmpeg", source="path")
-    
+
     def fake_run(cmd, **kwargs):
         if "-version" in cmd:
             return MagicMock(returncode=1, stdout="", stderr="Unknown option")
@@ -96,7 +96,7 @@ def test_validate_ffmpeg_candidate_nonzero_returncode():
 
 def test_validate_ffmpeg_candidate_timeout():
     candidate = FFmpegCandidate(executable="/usr/bin/ffmpeg", source="path")
-    
+
     with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="ffmpeg", timeout=5)):
         resolution = validate_ffmpeg_candidate(candidate)
         assert resolution is None
@@ -104,7 +104,7 @@ def test_validate_ffmpeg_candidate_timeout():
 
 def test_validate_ffmpeg_candidate_oserror():
     candidate = FFmpegCandidate(executable="/usr/bin/ffmpeg", source="path")
-    
+
     with patch("subprocess.run", side_effect=OSError("Permission denied")):
         resolution = validate_ffmpeg_candidate(candidate)
         assert resolution is None
@@ -119,7 +119,7 @@ def test_resolve_ffmpeg_fallback(monkeypatch):
 
     with patch("src.player._iter_ffmpeg_candidates", return_value=[cand1, cand2]), \
          patch("src.player.validate_ffmpeg_candidate", side_effect=[None, FFmpegResolution("/good/ffmpeg", "system-path", "ffmpeg 6.0")]):
-        
+
         res = resolve_ffmpeg()
         assert res is not None
         assert res.executable == "/good/ffmpeg"
