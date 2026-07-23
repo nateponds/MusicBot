@@ -6,15 +6,15 @@ This guide covers final, tested steps to install and run the Discord Music Bot o
 
 ## ⚠️ CRITICAL: FFmpeg Requirement on Linux
 
-**Linux users MUST install system FFmpeg and Opus.** The bundled `imageio-ffmpeg` fails on modern Linux glibc systems (Ubuntu 24.04+, GLIBC 2.39+) with **FFmpeg exit code -11 (SIGSEGV)**, causing audio playback to fail.
+**Linux users SHOULD use system FFmpeg.** The bundled `imageio-ffmpeg` was observed to fail on Ubuntu 24.04 (GLIBC 2.39) with **FFmpeg exit code -11 (SIGSEGV)**, causing audio playback to fail.
 
 **Install on Linux:**
-```bash
-sudo apt update && sudo apt install -y ffmpeg libopus0 libopus-dev
-```
+- Debian/Ubuntu runtime: `sudo apt update && sudo apt install -y ffmpeg libopus0`
+- Fedora runtime: `sudo dnf install -y ffmpeg-free opus`
+- RHEL/Rocky/Alma runtime: enable a repository providing `ffmpeg-free`, then install and capability-test it.
 
-**Windows**: The bundled FFmpeg fallback is normally sufficient. **macOS**:
-install FFmpeg and Opus with Homebrew as shown in the macOS section.
+**Windows**: System FFmpeg is preferred when configured; validated `imageio-ffmpeg` fallback is supported.
+**macOS**: Install FFmpeg and Opus with Homebrew as shown in the macOS section.
 
 ---
 
@@ -23,27 +23,6 @@ install FFmpeg and Opus with Homebrew as shown in the macOS section.
 - **Windows**: `.\install.ps1 -Run` for quick testing, or `.\install.ps1` to set up with Task Scheduler.
 - **Python**: 3.11+ required on all platforms.
 - **Python audio packages**: `imageio-ffmpeg` supplies an FFmpeg fallback;
-  `opuslib` is a Python binding, not a replacement for Linux's native Opus runtime.
-
----
-
-## Prerequisites
-
-### All Platforms
-- **Python 3.11+** installed and on PATH
-- A Discord application bot token (from [Discord Developer Portal](https://discord.com/developers/applications))
-- Git (optional, for cloning; you can also download ZIP)
-
-### Linux Only
-- **FFmpeg and Opus system libraries** (REQUIRED for audio playback):
-  - Debian/Ubuntu: `sudo apt install ffmpeg libopus0 libopus-dev`
-  - Fedora/RHEL: `sudo dnf install ffmpeg opus-devel`
-  - Alpine: `sudo apk add ffmpeg opus-dev`
-
----
-
-## Files to know
-- `index.py` — main bot launcher
 - `requirements.txt` — Python dependencies
 - `install.sh` — Linux installer (creates `venv`, checks for system FFmpeg)
 - `install.ps1` — Windows installer (creates `venv`)

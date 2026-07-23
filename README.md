@@ -47,10 +47,10 @@ A slash-command Discord music bot with YouTube and Spotify support, queue manage
 
 See [INSTALL.md](INSTALL.md) for full Windows and Linux setup instructions.
 
-Quick start on Linux:
+Quick start on Linux (Debian/Ubuntu):
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-venv python3-pip git ffmpeg libopus0 libopus-dev
+sudo apt install -y python3 python3-venv python3-pip git ffmpeg libopus0
 ./install.sh --run
 ```
 
@@ -59,10 +59,7 @@ Quick start on Windows PowerShell:
 PowerShell -ExecutionPolicy Bypass -File install.ps1 -Run
 ```
 
-On Windows, `imageio-ffmpeg` provides a bundled FFmpeg fallback and the
-installer installs the required Python packages. On Linux, install the system
-FFmpeg and Opus packages shown above. The bundled FFmpeg fallback can be
-incompatible with some Linux distributions, including Ubuntu 24.04+.
+On Windows, system FFmpeg is preferred when configured, with a validated `imageio-ffmpeg` fallback supported. On Linux, system FFmpeg is preferred; bundled `imageio-ffmpeg` was observed to fail on Ubuntu 24.04 (GLIBC 2.39).
 
 ## Configuration
 
