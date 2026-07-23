@@ -41,7 +41,7 @@ FFMPEG_BIN="$(command -v ffmpeg || true)"
 
 if [ -z "$FFMPEG_BIN" ] || ! check_ffmpeg_capability "$FFMPEG_BIN"; then
   echo "⚠️  System FFmpeg with Opus support was not found or failed capability check."
-  
+
   if [ -f /etc/debian_version ]; then
     if [ "$INSTALL_SYSTEM_DEPS" -eq 1 ]; then
       echo "Installing system FFmpeg & Opus via apt-get..."

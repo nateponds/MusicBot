@@ -37,7 +37,7 @@ This guide covers final, tested steps to install and run the Discord Music Bot o
 
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-venv python3-pip git ffmpeg libopus0 libopus-dev
+sudo apt install -y python3 python3-venv python3-pip git ffmpeg libopus0
 ```
 
 **Verify installation:**
@@ -110,8 +110,8 @@ sudo systemctl status discord-music-bot
 
 **Audio not playing / FFmpeg exit code -11?**
 - System FFmpeg installed? `ffmpeg -version`
-- Bundled imageio-ffmpeg is NOT compatible. Use system FFmpeg.
-- Fix: `sudo apt install ffmpeg libopus0 libopus-dev`
+- Bundled imageio-ffmpeg fallback was observed to fail on Ubuntu 24.04. Use system FFmpeg.
+- Fix: `sudo apt install ffmpeg libopus0`
 
 **FFmpeg or Opus not found?**
 ```bash
@@ -123,7 +123,7 @@ ldconfig -p | grep libopus
 ```
 
 **"FFmpeg is required" error at startup?**
-- Reinstall system packages: `sudo apt install ffmpeg libopus0 libopus-dev`
+- Reinstall system packages: `sudo apt install ffmpeg libopus0`
 
 **Logs and monitoring:**
 ```bash
@@ -293,7 +293,7 @@ launchctl start com.discord-music-bot
 
 **Fix on Linux**:
 ```bash
-sudo apt install ffmpeg libopus0 libopus-dev
+sudo apt install ffmpeg libopus0
 ```
 
 **Fix on Windows/macOS**: Reinstall FFmpeg via Homebrew or direct download.
@@ -314,14 +314,12 @@ brew install ffmpeg
 
 ### Bot crashes with "exit code -11"
 
-This is a segmentation fault from the bundled FFmpeg on Linux.
+On Ubuntu 24.04, the bundled imageio-ffmpeg fallback was observed to exit with code -11 (SIGSEGV).
 
 **Linux fix:**
+Install system FFmpeg:
 ```bash
-# Remove bundled FFmpeg package (if any)
-pip uninstall imageio-ffmpeg
-# Install system FFmpeg
-sudo apt install ffmpeg libopus0 libopus-dev
+sudo apt install ffmpeg libopus0
 ```
 
 ### Slash commands not appearing in Discord
