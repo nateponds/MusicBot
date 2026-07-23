@@ -28,13 +28,14 @@ class UtilityCommands:
         
         try:
             player = music_player.get_player(interaction.guild_id)
+            snapshot = await player.snapshot()
             
-            if not player.current_track:
+            if not snapshot.track or snapshot.state == "idle":
                 embed = MusicEmbedManager.create_error_embed("No track is currently playing")
                 await interaction.followup.send(embed=embed)
                 return
             
-            track = player.current_track
+            track = snapshot.track
             
             if announce:
                 # Send as channel message (now playing announcement)
@@ -58,8 +59,9 @@ class UtilityCommands:
                 # Show as inline reply
                 embed = MusicEmbedManager.create_now_playing_embed(
                     track,
-                    queue_size=len(player.queue.tracks),
-                    loop_mode=player.queue.loop_mode
+                    playback_state=snapshot.state,
+                    queue_size=snapshot.queue_size,
+                    loop_mode=snapshot.loop_mode
                 )
                 await interaction.followup.send(embed=embed)
         
@@ -189,7 +191,7 @@ class UtilityCommands:
             embed.add_field(
                 name="⚙️ Utility",
                 value="""
-                `/np` - Show now playing
+                `/np`, `/nowplaying` - Show now playing track
                 `/join` - Join voice channel
                 `/leave` - Leave voice channel
                 `/ping` - Check bot latency
