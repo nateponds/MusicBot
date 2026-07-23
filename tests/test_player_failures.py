@@ -1,6 +1,8 @@
 """
 Unit tests for GuildPlayer playback recovery, failure handling, concurrency, and thread safe callbacks.
 """
+import os
+import sys
 import pytest
 import asyncio
 import threading
@@ -802,3 +804,73 @@ async def test_repeat_one_recovery_skips_failed_track(mock_music_player):
     assert player.current_track is not None
     assert player.current_track.title == "t1_good"
     assert player.queue.current_index == 1
+
+
+@pytest.mark.asyncio
+async def test_finish_playback_logs_real_traceback_and_sigsegv_posix(mock_music_player, caplog):
+    player = GuildPlayer(guild_id=1, music_player=mock_music_player)
+    player.current_track = make_track("t1")
+    player._state = PlaybackState.PLAYING
+    gen = player._generation
+
+    try:
+        raise RuntimeError("Decoder crashed abruptly")
+    except RuntimeError as e:
+        err = e
+    setattr(err, "returncode", -11)
+
+    with patch("os.name", "posix"), patch("sys.platform", "linux"), \
+         patch("src.player.find_ffmpeg_executable", return_value="/usr/bin/ffmpeg"), \
+         patch("discord.FFmpegOpusAudio.from_probe", return_value=FakeAudioSource()):
+        await player._finish_playback(gen, err)
+
+    assert "Decoder crashed abruptly" in caplog.text
+    assert "-11" in caplog.text
+    assert "SIGSEGV" in caplog.text
+    assert "Traceback (most recent call last):" in caplog.text
+    assert "test_finish_playback_logs_real_traceback_and_sigsegv_posix" in caplog.text
+    assert "NoneType: None" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_finish_playback_logs_win32_no_sigsegv(mock_music_player, caplog):
+    player = GuildPlayer(guild_id=1, music_player=mock_music_player)
+    player.current_track = make_track("t1")
+    player._state = PlaybackState.PLAYING
+    gen = player._generation
+
+    try:
+        raise RuntimeError("Win32 playback crash")
+    except RuntimeError as e:
+        err = e
+    setattr(err, "returncode", -11)
+
+    with patch("os.name", "nt"), patch("sys.platform", "win32"), \
+         patch("src.player.find_ffmpeg_executable", return_value="/usr/bin/ffmpeg"), \
+         patch("discord.FFmpegOpusAudio.from_probe", return_value=FakeAudioSource()):
+        await player._finish_playback(gen, err)
+
+    assert "Win32 playback crash" in caplog.text
+    assert "-11" in caplog.text
+    assert "SIGSEGV" not in caplog.text
+    assert "NoneType: None" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_finish_playback_logs_exception_without_traceback(mock_music_player, caplog):
+    player = GuildPlayer(guild_id=1, music_player=mock_music_player)
+    player.current_track = make_track("t1")
+    player._state = PlaybackState.PLAYING
+    gen = player._generation
+
+    err = RuntimeError("No traceback exception")
+    setattr(err, "returncode", 1)
+
+    with patch("src.player.find_ffmpeg_executable", return_value="/usr/bin/ffmpeg"), \
+         patch("discord.FFmpegOpusAudio.from_probe", return_value=FakeAudioSource()):
+        await player._finish_playback(gen, err)
+
+    assert "No traceback exception" in caplog.text
+    assert "1" in caplog.text
+    assert "NoneType: None" not in caplog.text
+    assert "Traceback" not in caplog.text

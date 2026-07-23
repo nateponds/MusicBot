@@ -477,10 +477,19 @@ class GuildPlayer:
                 return
 
             if error:
-                error_code = getattr(error, 'returncode', 'N/A')
+                code = getattr(error, 'returncode', None)
+                if code is not None:
+                    if (os.name == 'posix' and sys.platform != 'win32') and (code == -11 or str(code) == '-11'):
+                        error_code = f"{code} (SIGSEGV)"
+                    else:
+                        error_code = str(code)
+                else:
+                    error_code = 'N/A'
+
+                exc_info = (type(error), error, error.__traceback__) if getattr(error, '__traceback__', None) else None
                 logger.error(
-                    "Guild %s runtime playback error: %s (exit code: %s)",
-                    self.guild_id, type(error).__name__, error_code, exc_info=True,
+                    "Guild %s runtime playback error: %s: %s (exit code: %s)",
+                    self.guild_id, type(error).__name__, error, error_code, exc_info=exc_info,
                 )
                 failed_track = self.current_track
                 self._state = PlaybackState.RECOVERING
