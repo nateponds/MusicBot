@@ -171,6 +171,11 @@ class MusicBot(commands.Cog):
         """Now playing command"""
         await UtilityCommands.now_playing(interaction, self.music_player)
     
+    @discord.app_commands.command(name="nowplaying", description="Show currently playing track (alias for /np)")
+    async def now_playing_alias(self, interaction: discord.Interaction):
+        """Alias for /np command"""
+        await UtilityCommands.now_playing(interaction, self.music_player)
+    
     @discord.app_commands.command(name="join", description="Join your voice channel")
     async def join(self, interaction: discord.Interaction):
         """Join command"""

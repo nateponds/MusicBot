@@ -1,124 +1,177 @@
 # Installation and Setup (Windows & Linux)
 
-This guide covers final, tested steps to install and run the Discord Music Bot on both Linux (Debian/Ubuntu-like) and Windows (PowerShell). Installation is now simplified: FFmpeg is bundled as a Python package, so you only need Python and git.
+This guide covers final, tested steps to install and run the Discord Music Bot on both Linux (Debian/Ubuntu-like) and Windows (PowerShell).
+
+---
+
+## ⚠️ CRITICAL: FFmpeg Requirement on Linux
+
+**Linux users MUST install system FFmpeg and Opus.** The bundled `imageio-ffmpeg` fails on modern Linux glibc systems (Ubuntu 24.04+, GLIBC 2.39+) with **FFmpeg exit code -11 (SIGSEGV)**, causing audio playback to fail.
+
+**Install on Linux:**
+```bash
+sudo apt update && sudo apt install -y ffmpeg libopus0 libopus-dev
+```
+
+**Windows & macOS**: Bundled packages are fine; no system installation needed.
 
 ---
 
 ## Quick summary
-- **Linux**: `./install.sh` then optionally `sudo ./install.sh --systemd` to create a systemd service.
+- **Linux**: `./install.sh` (checks for system FFmpeg), then `sudo ./install.sh --systemd` for persistent service.
 - **Windows**: `.\install.ps1 -Run` for quick testing, or `.\install.ps1` to set up with Task Scheduler.
-- **Both**: Python 3.11+ is the only requirement. FFmpeg comes bundled with Python dependencies!
+- **Python**: 3.11+ required on all platforms.
 
 ---
 
-## Prerequisites (both OSes)
-- **Python 3.11+** installed and on PATH (that's it!)
-- A Discord application bot token (from Discord Developer Portal)
+## Prerequisites
+
+### All Platforms
+- **Python 3.11+** installed and on PATH
+- A Discord application bot token (from [Discord Developer Portal](https://discord.com/developers/applications))
 - Git (optional, for cloning; you can also download ZIP)
 
-**Note:** FFmpeg and Opus are now bundled as Python packages (`imageio-ffmpeg` and `opuslib`), so no separate system installation is needed. The bot stores local cache under `./cache` for fast repeat playback.
+### Linux Only
+- **FFmpeg and Opus system libraries** (REQUIRED for audio playback):
+  - Debian/Ubuntu: `sudo apt install ffmpeg libopus0 libopus-dev`
+  - Fedora/RHEL: `sudo dnf install ffmpeg opus-devel`
+  - Alpine: `sudo apk add ffmpeg opus-dev`
 
 ---
 
 ## Files to know
 - `index.py` — main bot launcher
-- `requirements.txt` — Python dependencies (includes `imageio-ffmpeg`)
-- `install.sh` — local installer for Linux (creates `venv` and installs Python deps)
-- `install.ps1` — local installer for Windows (creates `venv` and installs Python deps)
+- `requirements.txt` — Python dependencies
+- `install.sh` — Linux installer (creates `venv`, checks for system FFmpeg)
+- `install.ps1` — Windows installer (creates `venv`)
 - `INSTALL.md` — this guide
-- `.env.example` — sample environment file (copy to `.env`)
+- `.env.example` — sample environment file
 
 ---
 
 ## 1) Linux (Debian / Ubuntu / similar)
 
-A. Install Python (only system dependency!)
+### A. Install system dependencies
 
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-venv python3-pip git
+sudo apt install -y python3 python3-venv python3-pip git ffmpeg libopus0 libopus-dev
 ```
 
-**Note:** FFmpeg and Opus are now bundled with Python dependencies, so you don't need to install them separately.
+**Verify installation:**
+```bash
+ffmpeg -version
+ldconfig -p | grep libopus
+```
 
-B. Extract / clone repo and run installer
-
-If you downloaded a ZIP and extracted it into `/home/youruser/discord-music-bot`:
+### B. Clone/extract and run installer
 
 ```bash
-cd /home/youruser/discord-music-bot
-# Quick one-command install + run
+cd /path/to/discord-music-bot
 ./install.sh --run
 ```
 
-The script will create a `venv` in the repo, install `requirements.txt` (including `imageio-ffmpeg` and `opuslib`), and copy `.env.example` → `.env` if missing.
+The script will:
+1. ✅ Check for system FFmpeg and Opus
+2. Create a `venv` in the repo
+3. Install `requirements.txt` dependencies
+4. Copy `.env.example` → `.env` if missing
 
-C. Edit `.env`
+If FFmpeg/Opus is not found, the installer will **fail with clear instructions** on how to install them.
 
-Open `.env` in an editor and set your `DISCORD_TOKEN` and optionally `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `GENIUS_ACCESS_TOKEN`, and other settings.
+### C. Edit `.env`
 
-For restricted YouTube videos/playlists (age/region/private access via your account), add one of these:
-
+Open `.env` and set your credentials:
 ```env
-# Recommended: automatic browser cookie loading
-YTDLP_COOKIES_FROM_BROWSER=edge
-# Optional profile (leave blank for default)
-YTDLP_COOKIES_BROWSER_PROFILE=
-
-# Alternative: exported cookie file
-YTDLP_COOKIEFILE=./cookies.txt
+DISCORD_TOKEN=your_token_here
+# Optional:
+SPOTIFY_CLIENT_ID=...
+SPOTIFY_CLIENT_SECRET=...
+GENIUS_ACCESS_TOKEN=...
 ```
 
-D. Test run (terminal) [optional]
+For restricted YouTube videos/playlists:
+```env
+YTDLP_COOKIES_FROM_BROWSER=edge
+```
+
+### D. Test run
 
 ```bash
 source venv/bin/activate
 python index.py
 ```
 
-E. Make it persistent with systemd (optional, run as root)
+Press `Ctrl+C` to stop.
+
+### E. Make it persistent with systemd (recommended for 24/7)
 
 ```bash
 sudo ./install.sh --systemd
 sudo systemctl start discord-music-bot
 sudo systemctl enable discord-music-bot
-sudo journalctl -u discord-music-bot -f
 ```
 
-The `--systemd` flag creates `/etc/systemd/system/discord-music-bot.service` for the user who invoked the script (via `SUDO_USER`) and sets it to restart on failure.
-
-F. Logs and troubleshooting
-- Tail logs: `sudo journalctl -u discord-music-bot -f` (if systemd), or `tail -f bot.log` if launching in terminal.
-- Common errors: missing `DISCORD_TOKEN` in `.env`, missing Python dependencies (run `pip install -r requirements.txt` again).
-- If FFmpeg or Opus can't be found: 
-  - FFmpeg: `python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())"`
-  - Opus: `python -c "import opuslib; print(opuslib.__file__)"`
-
-G. 24/7 operation and monitoring
-- A plain terminal session stops when the terminal closes, so use `systemd` for true 24/7 Linux hosting.
-- Recommended monitoring commands:
-
+**View logs:**
 ```bash
-sudo systemctl status discord-music-bot
 sudo journalctl -u discord-music-bot -f
-tail -f logs/bot.log
 ```
 
-- The bot writes logs to `logs/bot.log` and keeps 7 days of history automatically.
-- If you use the one-command installer with `--systemd`, the bot will also restart on reboot and after crashes.
+**Restart/Stop:**
+```bash
+sudo systemctl restart discord-music-bot
+sudo systemctl stop discord-music-bot
+sudo systemctl status discord-music-bot
+```
+
+### F. Troubleshooting on Linux
+
+**Audio not playing / FFmpeg exit code -11?**
+- System FFmpeg installed? `ffmpeg -version`
+- Bundled imageio-ffmpeg is NOT compatible. Use system FFmpeg.
+- Fix: `sudo apt install ffmpeg libopus0 libopus-dev`
+
+**FFmpeg or Opus not found?**
+```bash
+# Check system FFmpeg:
+which ffmpeg
+
+# Check Opus library:
+ldconfig -p | grep libopus
+```
+
+**"FFmpeg is required" error at startup?**
+- Reinstall system packages: `sudo apt install ffmpeg libopus0 libopus-dev`
+
+**Logs and monitoring:**
+```bash
+# View live logs
+sudo journalctl -u discord-music-bot -f
+
+# View bot application logs
+tail -f logs/bot.log
+
+# Check service status
+sudo systemctl status discord-music-bot
+
+# View recent errors
+sudo journalctl -u discord-music-bot -n 50 --no-pager
+```
 
 ---
 
 ## 2) Windows (PowerShell)
 
-A. Install Python (only requirement!)
-- Install Python 3.11+ from [python.org](https://python.org) (ensure `Add Python to PATH` is checked).
-- **FFmpeg and Opus are now bundled as Python packages, so no separate installation needed!**
+### A. Install Python
 
-B. Create repo folder and extract
-- Extract the ZIP to `C:\Users\YourUser\discord-music-bot` or clone the repo with Git.
+Install Python 3.11+ from [python.org](https://python.org). **Ensure "Add Python to PATH" is checked during installation.**
 
-C. Quick one-command install + run (recommended for testing)
+**Verify:**
+```powershell
+python --version
+```
+
+### B. Extract and run installer
 
 ```powershell
 cd C:\Users\YourUser\discord-music-bot
@@ -126,84 +179,222 @@ PowerShell -ExecutionPolicy Bypass -File install.ps1 -Run
 ```
 
 Or step-by-step:
-
 ```powershell
 cd C:\Users\YourUser\discord-music-bot
 python -m venv venv
-# Activate
 venv\Scripts\Activate.ps1
-# Upgrade pip and install deps (including imageio-ffmpeg and opuslib)
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-D. Prepare `.env`
+### C. Edit `.env`
 
 ```powershell
 copy .env.example .env
-# Edit .env in Notepad or VS Code
 notepad .env
 ```
 
-For restricted YouTube videos/playlists, configure one of these in `.env`:
+Add your Discord token and optional Spotify/Genius credentials.
 
-```env
-# Recommended: automatic browser cookie loading
-YTDLP_COOKIES_FROM_BROWSER=edge
-YTDLP_COOKIES_BROWSER_PROFILE=
-
-# Alternative: exported cookie file
-YTDLP_COOKIEFILE=./cookies.txt
-```
-
-E. Run the bot (PowerShell)
+### D. Run the bot
 
 ```powershell
 venv\Scripts\Activate.ps1
 python index.py
 ```
 
-F. Run automatically on Windows startup (two options)
+Press `Ctrl+C` to stop.
 
-1) **Task Scheduler (simple)**: Create a task that runs on user login and starts: `C:\path\to\venv\Scripts\python.exe C:\path\to\index.py`.
+### E. Run on Windows startup (optional)
 
-2) **NSSM (recommended for services)**: Install NSSM (Non-Sucking Service Manager) and create a Windows service to run the Python executable with `index.py` as the argument.
+#### Option 1: Task Scheduler (simple)
 
-G. 24/7 operation and monitoring
-- A normal terminal session stops when the terminal closes, so use Task Scheduler or NSSM for 24/7 Windows hosting.
-- Recommended monitoring commands:
+1. Open Task Scheduler (`taskschd.msc`)
+2. Create Basic Task → "Discord Music Bot"
+3. Trigger: "At log on"
+4. Action: Start program
+5. Program: `C:\path\to\venv\Scripts\python.exe`
+6. Arguments: `C:\path\to\index.py`
+7. Check "Run with highest privileges"
 
+#### Option 2: NSSM (recommended for services)
+
+Install [NSSM](https://nssm.cc/download):
 ```powershell
-schtasks /Query /TN DiscordMusicBot
-Get-Content .\logs\bot.log -Wait
+nssm install DiscordMusicBot C:\path\to\venv\Scripts\python.exe "C:\path\to\index.py"
+nssm start DiscordMusicBot
 ```
 
-- The bot writes logs to `logs/bot.log` and keeps 7 days of history automatically.
-- If you use `install.ps1 -CreateTask`, the bot can start at logon and survive terminal closure.
- 
-You can also create a Scheduled Task from PowerShell using the installer:
+### F. Troubleshooting on Windows
 
+**Python not found?**
+- Reinstall Python, checking "Add Python to PATH"
+- Verify: `python --version`
+
+**Permission denied running .ps1?**
 ```powershell
-# Create a Scheduled Task that runs at logon
-PowerShell -ExecutionPolicy Bypass -File install.ps1 -CreateTask
+PowerShell -ExecutionPolicy Bypass -File install.ps1
+```
+
+**View logs:**
+```powershell
+Get-Content .\logs\bot.log -Wait
 ```
 
 ---
 
-## 3) One-command / zip distribution flow (recommended for simple installs)
-1. Create a ZIP of the repository (exclude `.git`, `venv`, and large caches) and upload it for users.
-2. User downloads the ZIP and extracts into a folder.
-3. On Linux: `cd repo && ./install.sh` — this sets up the `venv` and dependencies.
-4. On Windows: `cd repo && python -m venv venv && venv\Scripts\Activate.ps1 && pip install -r requirements.txt` — or provide a short PowerShell script `install.ps1` with the same steps.
+## 3) macOS
 
-Yes — after extracting and running `install.sh` (Linux) or running the short Windows install steps, the user will only need to edit `.env` then run `python index.py` to start the bot.
+### A. Install system dependencies
+
+```bash
+brew install python@3.12 ffmpeg opus
+```
+
+### B. Clone and install
+
+```bash
+cd /path/to/discord-music-bot
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### C. Edit `.env` and run
+
+```bash
+cp .env.example .env
+# Edit .env with your token
+python index.py
+```
+
+### D. Keep running 24/7 with launchd
+
+Create `~/Library/LaunchAgents/com.discord-music-bot.plist`:
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.discord-music-bot</string>
+    <key>Program</key>
+    <string>/path/to/venv/bin/python</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/path/to/index.py</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+</dict>
+</plist>
+```
+
+Then:
+```bash
+launchctl load ~/Library/LaunchAgents/com.discord-music-bot.plist
+launchctl start com.discord-music-bot
+```
+
+---
+
+## 4) Common Issues
+
+### Audio stops after first track / "No track is currently playing"
+
+**Cause**: FFmpeg crash (exit code -11 on Linux).
+
+**Fix on Linux**:
+```bash
+sudo apt install ffmpeg libopus0 libopus-dev
+```
+
+**Fix on Windows/macOS**: Reinstall FFmpeg via Homebrew or direct download.
+
+### "FFmpeg is required for voice playback but was not found"
+
+**Linux**:
+```bash
+sudo apt install ffmpeg
+```
+
+**Windows**: Ensure Python is on PATH and FFmpeg is in the bundled package.
+
+**macOS**:
+```bash
+brew install ffmpeg
+```
+
+### Bot crashes with "exit code -11"
+
+This is a segmentation fault from the bundled FFmpeg on Linux.
+
+**Linux fix:**
+```bash
+# Remove bundled FFmpeg package (if any)
+pip uninstall imageio-ffmpeg
+# Install system FFmpeg
+sudo apt install ffmpeg libopus0 libopus-dev
+```
+
+### Slash commands not appearing in Discord
+
+1. Bot must be in the server with `/applications.commands` scope
+2. Ensure bot has "Use Slash Commands" permission
+3. Restart the Discord client (`Ctrl+R`)
+4. Check bot logs: `journalctl -u discord-music-bot -f` (Linux) or `Get-Content .\logs\bot.log` (Windows)
 
 ---
 
 ## 5) Helpful commands
-- Activate venv (Linux): `source venv/bin/activate`
-- Activate venv (Windows PowerShell): `venv\Scripts\Activate.ps1`
-- Run tests: `python -m pytest -q`
-- Check ffmpeg on PATH: `ffmpeg -version`
-- Run the bot `python index.py`
+
+**Check system FFmpeg/Opus (Linux):**
+```bash
+ffmpeg -version
+ldconfig -p | grep libopus
+```
+
+**View bot logs:**
+```bash
+# Linux (systemd)
+sudo journalctl -u discord-music-bot -f
+
+# Linux (terminal)
+tail -f logs/bot.log
+
+# Windows PowerShell
+Get-Content .\logs\bot.log -Wait
+```
+
+**Restart bot (Linux systemd):**
+```bash
+sudo systemctl restart discord-music-bot
+```
+
+**Stop bot:**
+```bash
+# Linux systemd
+sudo systemctl stop discord-music-bot
+
+# Any: Ctrl+C in terminal
+```
+
+**Run tests:**
+```bash
+source venv/bin/activate  # Linux/macOS
+python -m pytest tests/ -v
+```
+
 ---
+
+## 6) Support
+
+- **Issue**: Check `logs/bot.log` for error messages
+- **FFmpeg problems on Linux**: Verify system installation with `ffmpeg -version`
+- **Discord token issues**: Ensure token is valid at [Discord Developer Portal](https://discord.com/developers/applications)
+
+---
+
+✨ **Happy music streaming!**

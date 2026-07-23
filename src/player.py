@@ -123,7 +123,12 @@ class GuildPlayer:
         self._play_task: Optional[asyncio.Task] = None
     
     async def play_next(self) -> None:
-        """Play next track in queue"""
+        """Play next track in queue with robust error handling.
+        
+        Handles FFmpeg failures gracefully, preventing state corruption.
+        IMPORTANT: System FFmpeg (not bundled imageio-ffmpeg) is required on Linux
+        for audio playback to work reliably.
+        """
         if self.is_paused:
             return
         
@@ -132,42 +137,86 @@ class GuildPlayer:
             self.current_track = next_track
             self.is_playing = True
             logger.info("Guild %s preparing track: %s - %s", self.guild_id, next_track.artist, next_track.title)
+            
             if not self.voice_client:
                 logger.warning("Guild %s has no voice client while starting playback", self.guild_id)
+                self.current_track = None
+                self.is_playing = False
                 return
 
             ffmpeg_path = find_ffmpeg_executable()
             if not ffmpeg_path:
-                raise RuntimeError("FFmpeg is required for voice playback but was not found")
+                logger.error("Guild %s: FFmpeg is required for voice playback but was not found. "
+                           "On Linux, install with: sudo apt install ffmpeg libopus0 libopus-dev", 
+                           self.guild_id)
+                self.current_track = None
+                self.is_playing = False
+                await self.play_next()
+                return
+            
             logger.info("Guild %s using FFmpeg at %s", self.guild_id, ffmpeg_path)
 
             stream_url = await self.music_player.youtube.get_stream_url(next_track.url)
             if not stream_url:
-                raise RuntimeError(f"Could not resolve stream URL for {next_track.url}")
+                logger.error("Guild %s: Could not resolve stream URL for %s", self.guild_id, next_track.url)
+                self.current_track = None
+                self.is_playing = False
+                await self.play_next()
+                return
 
             logger.info("Guild %s stream URL resolved", self.guild_id)
 
-            source = await discord.FFmpegOpusAudio.from_probe(
-                stream_url,
-                method="fallback",
-                before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-                executable=ffmpeg_path,
-            )
+            try:
+                source = await discord.FFmpegOpusAudio.from_probe(
+                    stream_url,
+                    method="fallback",
+                    before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+                    executable=ffmpeg_path,
+                )
+            except Exception as e:
+                error_code = getattr(e, 'returncode', 'N/A')
+                logger.error(
+                    "Guild %s: FFmpeg probe error for '%s' - %s (exit code: %s). "
+                    "If exit code is -11 (SIGSEGV), use system FFmpeg: sudo apt install ffmpeg libopus0 libopus-dev",
+                    self.guild_id,
+                    next_track.title,
+                    type(e).__name__,
+                    error_code,
+                    exc_info=logger.isEnabledFor(logging.DEBUG)
+                )
+                self.current_track = None
+                self.is_playing = False
+                await self.play_next()
+                return
 
             def _after_playback(error: Optional[Exception]):
+                """Callback after playback ends or fails"""
                 if error:
+                    error_code = getattr(error, 'returncode', 'N/A')
                     logger.error(
-                        "Guild %s playback error: %s",
+                        "Guild %s playback error: %s (exit code: %s). "
+                        "If exit code is -11, the FFmpeg binary may be incompatible with this system.",
                         self.guild_id,
-                        error,
-                        exc_info=(type(error), error, error.__traceback__),
+                        type(error).__name__,
+                        error_code,
+                        exc_info=logger.isEnabledFor(logging.DEBUG)
                     )
                 else:
                     logger.info("Guild %s finished track: %s", self.guild_id, next_track.title)
+                
+                # Always clear current track state and move to next
+                self.current_track = None
+                self.is_playing = False
                 asyncio.run_coroutine_threadsafe(self.play_next(), self.music_player.bot.loop)
 
             logger.info("Guild %s starting voice playback", self.guild_id)
-            self.voice_client.play(source, after=_after_playback)
+            try:
+                self.voice_client.play(source, after=_after_playback)
+            except Exception as e:
+                logger.error("Guild %s: Failed to start playback: %s", self.guild_id, e, exc_info=True)
+                self.current_track = None
+                self.is_playing = False
+                await self.play_next()
         else:
             self.is_playing = False
             self.current_track = None
