@@ -458,6 +458,54 @@ async def test_notification_failure_does_not_block_advancement(mock_music_player
 
 
 @pytest.mark.asyncio
+async def test_runtime_failure_advances_queue_before_notification_io(mock_music_player):
+    player = GuildPlayer(guild_id=1, music_player=mock_music_player)
+    vc = CapturingVoiceClient()
+    player.voice_client = vc
+
+    send_started = asyncio.Event()
+    send_block = asyncio.Event()
+
+    async def blocking_send(*args, **kwargs):
+        send_started.set()
+        await send_block.wait()
+
+    channel = AsyncMock()
+    channel.send = AsyncMock(side_effect=blocking_send)
+    player.set_notification_channel(channel)
+
+    t1 = make_track("t1_failed")
+    t2 = make_track("t2_playable")
+    await player.queue.add(t1)
+    await player.queue.add(t2)
+
+    mock_music_player.youtube.get_stream_url = AsyncMock(return_value="http://stream")
+
+    with patch("src.player.find_ffmpeg_executable", return_value="/usr/bin/ffmpeg"), \
+         patch("discord.FFmpegOpusAudio.from_probe", return_value=FakeAudioSource()):
+        await player.play_next()
+
+    assert player.current_track == t1
+    gen = player._generation
+    vc.is_playing_flag = False
+
+    with patch("src.player.find_ffmpeg_executable", return_value="/usr/bin/ffmpeg"), \
+         patch("discord.FFmpegOpusAudio.from_probe", return_value=FakeAudioSource()):
+        finish_task = asyncio.create_task(player._finish_playback(gen, RuntimeError("runtime error")))
+
+        await send_started.wait()
+
+        # Prove second track reaches PLAYING while channel.send() is still blocked
+        assert player._state == PlaybackState.PLAYING
+        assert player.current_track == t2
+
+        send_block.set()
+        await finish_task
+
+    assert channel.send.called
+
+
+@pytest.mark.asyncio
 async def test_audio_callback_from_thread(mock_music_player):
     player = GuildPlayer(guild_id=1, music_player=mock_music_player)
     vc = CapturingVoiceClient()

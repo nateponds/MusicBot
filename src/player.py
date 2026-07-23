@@ -493,10 +493,12 @@ class GuildPlayer:
 
         if failed_track:
             try:
-                await self._notify_playback_failures([failed_track])
-            except Exception:
-                pass
-            await self.play_next(ignore_repeat=True)
+                await self.play_next(ignore_repeat=True)
+            finally:
+                try:
+                    await self._notify_playback_failures([failed_track])
+                except Exception:
+                    pass
         else:
             await self.play_next()
 
