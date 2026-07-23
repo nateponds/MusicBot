@@ -88,10 +88,10 @@ jobs:
           ./venv/bin/python -m pytest -q
 
   fedora-system-tests:
-    name: Fedora System FFmpeg Probe
+    name: Fedora 43 System FFmpeg Probe
     runs-on: ubuntu-latest
     container:
-      image: fedora:40
+      image: fedora:43
 
     steps:
       - uses: actions/checkout@v4
@@ -102,6 +102,6 @@ jobs:
           python3 -m venv venv
           ./venv/bin/pip install -r requirements.txt
 
-      - name: Run unit and system capability tests
+      - name: Run system capability test
         run: |
-          ./venv/bin/python -m pytest -q
+          ./venv/bin/python -m pytest -q -m system
