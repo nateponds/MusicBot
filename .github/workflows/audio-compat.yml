@@ -24,6 +24,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Validate installer script syntax
+        if: runner.os == 'Linux'
+        run: bash -n install.sh
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -62,3 +66,42 @@ jobs:
       - name: Run system capability test
         run: |
           python -m pytest -q -m system
+
+  debian-system-tests:
+    name: Debian 12 System FFmpeg Probe
+    runs-on: ubuntu-latest
+    container:
+      image: debian:bookworm-slim
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y python3 python3-pip python3-venv ffmpeg libopus0
+          python3 -m venv venv
+          ./venv/bin/pip install -r requirements.txt
+
+      - name: Run unit and system capability tests
+        run: |
+          ./venv/bin/python -m pytest -q
+
+  fedora-system-tests:
+    name: Fedora System FFmpeg Probe
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          dnf install -y python3 python3-pip ffmpeg-free opus
+          python3 -m venv venv
+          ./venv/bin/pip install -r requirements.txt
+
+      - name: Run unit and system capability tests
+        run: |
+          ./venv/bin/python -m pytest -q
