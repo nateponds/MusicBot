@@ -7,19 +7,6 @@ import pytest_asyncio
 from src.queue import Queue, Track
 
 
-@pytest.fixture
-def event_loop():
-    """Create event loop for async tests"""
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    yield loop
-    if not loop.is_closed():
-        loop.close()
-
-
 @pytest_asyncio.fixture
 async def empty_queue():
     """Create empty queue fixture"""
