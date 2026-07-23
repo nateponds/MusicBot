@@ -1,45 +1,87 @@
 #!/usr/bin/env bash
 # Local installer script for the Discord Music Bot
-# Usage (from repository root): ./install.sh
-#
-# IMPORTANT: FFmpeg and Opus MUST be installed as system packages on Linux
-# for reliable audio playback. The bundled imageio-ffmpeg fails on modern
-# glibc systems (Ubuntu 24.04+, GLIBC 2.39+).
+# Usage (from repository root): ./install.sh [--install-system-deps] [--systemd] [--run]
 set -euo pipefail
 
 REPO_DIR="$(pwd)"
 VENV_DIR="$REPO_DIR/venv"
 
+INSTALL_SYSTEM_DEPS=0
+DO_SYSTEMD=0
+DO_RUN=0
+
+for arg in "$@"; do
+  case "$arg" in
+    --install-system-deps) INSTALL_SYSTEM_DEPS=1 ;;
+    --systemd) DO_SYSTEMD=1 ;;
+    --run) DO_RUN=1 ;;
+    *) echo "Unknown option: $arg" >&2; exit 1 ;;
+  esac
+done
+
 echo "Installing into: $REPO_DIR"
 
-# Ensure Python is available
 if ! command -v python3 >/dev/null 2>&1; then
   echo "python3 not found. Install Python 3.11+ first." >&2
   exit 1
 fi
 
-# Check for system FFmpeg and Opus (REQUIRED for audio playback on Linux)
-echo "Checking for system dependencies..."
-if ! command -v ffmpeg >/dev/null 2>&1; then
-  echo "❌ ERROR: ffmpeg not found in PATH. Audio playback will fail." >&2
-  echo "" >&2
-  echo "Install system FFmpeg and Opus with one of these commands:" >&2
-  echo "  Debian/Ubuntu:  sudo apt update && sudo apt install -y ffmpeg libopus0 libopus-dev" >&2
-  echo "  Fedora/RHEL:    sudo dnf install -y ffmpeg opus-devel" >&2
-  echo "  Alpine:         sudo apk add ffmpeg opus-dev" >&2
-  echo "  macOS:          brew install ffmpeg opus" >&2
-  echo "" >&2
+check_ffmpeg_capability() {
+  local ffmpeg_bin="$1"
+  if ! "$ffmpeg_bin" -hide_banner -version >/dev/null 2>&1; then
+    return 1
+  fi
+  if ! "$ffmpeg_bin" -hide_banner -loglevel error -f lavfi -i anullsrc=r=48000:cl=stereo -t 0.1 -c:a libopus -f opus - >/dev/null 2>&1; then
+    return 1
+  fi
+  return 0
+}
+
+FFMPEG_BIN="$(command -v ffmpeg || true)"
+
+if [ -z "$FFMPEG_BIN" ] || ! check_ffmpeg_capability "$FFMPEG_BIN"; then
+  echo "⚠️  System FFmpeg with Opus support was not found or failed capability check."
+  
+  if [ -f /etc/debian_version ]; then
+    if [ "$INSTALL_SYSTEM_DEPS" -eq 1 ]; then
+      echo "Installing system FFmpeg & Opus via apt-get..."
+      if [ "$(id -u)" -eq 0 ]; then
+        apt-get update && apt-get install -y ffmpeg libopus0
+      else
+        sudo apt-get update && sudo apt-get install -y ffmpeg libopus0
+      fi
+      FFMPEG_BIN="$(command -v ffmpeg || true)"
+    elif [ -t 0 ]; then
+      read -rp "Install system FFmpeg and libopus0 via apt? [y/N] " response
+      if [[ "$response" =~ ^[Yy]$ ]]; then
+        if [ "$(id -u)" -eq 0 ]; then
+          apt-get update && apt-get install -y ffmpeg libopus0
+        else
+          sudo apt-get update && sudo apt-get install -y ffmpeg libopus0
+        fi
+        FFMPEG_BIN="$(command -v ffmpeg || true)"
+      fi
+    else
+      echo "Non-interactive shell detected. Run:" >&2
+      echo "  sudo apt-get update && sudo apt-get install -y ffmpeg libopus0" >&2
+      echo "or rerun with --install-system-deps." >&2
+      exit 1
+    fi
+  else
+    echo "Please install FFmpeg with libopus support for your distribution:" >&2
+    echo "  Fedora:  sudo dnf install -y ffmpeg-free opus" >&2
+    echo "  Arch:    sudo pacman -S ffmpeg opus" >&2
+    echo "  macOS:   brew install ffmpeg opus" >&2
+    exit 1
+  fi
+fi
+
+if [ -z "$FFMPEG_BIN" ] || ! check_ffmpeg_capability "$FFMPEG_BIN"; then
+  echo "❌ ERROR: FFmpeg validation failed after installation check." >&2
   exit 1
 fi
 
-if ! ldconfig -p 2>/dev/null | grep -q libopus >/dev/null 2>&1; then
-  echo "⚠️  WARNING: libopus not found. Audio encoding may fail." >&2
-  echo "Install with: sudo apt install -y libopus0 libopus-dev (Debian/Ubuntu)" >&2
-  echo "           or: sudo dnf install -y opus-devel (Fedora/RHEL)" >&2
-fi
-
-echo "✅ System dependencies found."
-echo ""
+echo "✅ Verified working FFmpeg executable: $FFMPEG_BIN"
 
 echo "Creating virtual environment in $VENV_DIR (if missing)"
 python3 -m venv "$VENV_DIR"
@@ -54,28 +96,18 @@ else
   echo "requirements.txt not found; please ensure it exists." >&2
 fi
 
-# Copy example .env if missing
 if [ ! -f .env ] && [ -f .env.example ]; then
   cp .env.example .env
-  echo "Created .env from .env.example — please edit .env with your DISCORD_TOKEN and other secrets."
+  echo "Created .env from .env.example — edit .env with DISCORD_TOKEN."
 fi
 
-echo ""
-echo "✅ Installation complete. To test-run the bot now:"
-echo "  source venv/bin/activate"
-echo "  python index.py"
-
-echo ""
-echo "To create a systemd service (runs on boot, auto-restart on failure):"
-echo "  sudo ./install.sh --systemd"
-
-if [ "${1-}" = "--systemd" ]; then
+if [ "$DO_SYSTEMD" -eq 1 ]; then
   if [ "$(id -u)" -ne 0 ]; then
     echo "--systemd requires root. Rerun with sudo." >&2
     exit 1
   fi
 
-  BOT_USER="${SUDO_USER:-$(logname || echo $USER)}"
+  BOT_USER="${SUDO_USER:-$(logname 2>/dev/null || echo $USER)}"
   SERVICE_PATH="/etc/systemd/system/discord-music-bot.service"
 
   echo "Creating systemd service for user: $BOT_USER"
@@ -99,17 +131,11 @@ EOF
 
   systemctl daemon-reload
   systemctl enable discord-music-bot
-  echo ""
   echo "✅ Systemd service created at $SERVICE_PATH"
-  echo "Start with: sudo systemctl start discord-music-bot"
-  echo "View logs: sudo journalctl -u discord-music-bot -f"
 fi
 
-# Optionally run the bot after install
-if [ "${1-}" = "--run" ]; then
-  echo ""
-  echo "🎵 Starting bot in foreground... (use Ctrl+C to stop)"
-  # Activate venv and run
+if [ "$DO_RUN" -eq 1 ]; then
+  echo "🎵 Starting bot..."
   # shellcheck source=/dev/null
   source "$VENV_DIR/bin/activate"
   python "$REPO_DIR/index.py"

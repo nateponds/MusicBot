@@ -8,7 +8,7 @@ Linux (Debian/Ubuntu):
 
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-venv python3-pip git ffmpeg libopus0 libopus-dev
+sudo apt install -y python3 python3-venv python3-pip git ffmpeg libopus0
 python3 --version  # Should be 3.11+
 ```
 

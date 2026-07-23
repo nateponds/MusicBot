@@ -4,11 +4,10 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
-# Install system dependencies (FFmpeg, Opus, build tools)
+# Install system dependencies (FFmpeg, Opus runtime, build tools)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libopus0 \
-    libopus-dev \
     git \
     && rm -rf /var/lib/apt/lists/*
 
