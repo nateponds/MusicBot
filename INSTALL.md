@@ -243,7 +243,114 @@ Get-Content .\logs\bot.log -Wait
 
 ---
 
-## 3) macOS
+## 3) Docker (Linux, easiest option for 24/7 deployment)
+
+**Recommended for 24/7 Linux hosting.** Docker automatically handles FFmpeg/Opus, reducing setup complexity.
+
+### A. Prerequisites
+
+- Docker and Docker Compose installed
+  - Ubuntu/Debian: `sudo apt install docker.io docker-compose-plugin`
+  - Verify: `docker --version` and `docker compose version`
+
+### B. Quick start
+
+```bash
+cd /path/to/discord-music-bot
+cp .env.example .env
+# Edit .env with your DISCORD_TOKEN
+nano .env
+
+# Build and start
+docker compose up -d
+
+# View logs
+docker compose logs -f
+```
+
+That's it! The bot runs in the background with automatic restart on failure.
+
+### C. Common Docker commands
+
+```bash
+# View logs
+docker compose logs -f discord-music-bot
+
+# Stop the bot
+docker compose stop
+
+# Start the bot
+docker compose start
+
+# Restart the bot
+docker compose restart
+
+# Remove everything (wipe cache/logs)
+docker compose down -v
+
+# Check status
+docker compose ps
+```
+
+### D. Persist data (cache, logs) outside container
+
+The `docker-compose.yml` already mounts:
+- `./cache` → `/app/cache` (audio cache)
+- `./logs` → `/app/logs` (bot logs)
+
+These persist even if the container is removed:
+
+```bash
+# View bot logs on host
+tail -f logs/bot.log
+
+# Check cache size
+du -sh cache/
+```
+
+### E. Auto-start on system boot
+
+```bash
+# Enable Docker to start on boot
+sudo systemctl enable docker
+
+# Make compose auto-restart
+# (already set in docker-compose.yml: restart: unless-stopped)
+
+# Start bot on boot
+cd /path/to/discord-music-bot
+docker compose up -d
+```
+
+### F. Troubleshooting Docker
+
+**Permission denied error?**
+```bash
+# Run Docker without sudo (optional)
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
+**Build image locally:**
+```bash
+docker compose build --no-cache
+```
+
+**Inspect running container:**
+```bash
+docker compose exec discord-music-bot bash
+# Inside container: ffmpeg -version
+```
+
+**Clear all Docker data:**
+```bash
+docker compose down -v
+docker system prune -a
+```
+
+---
+
+## 4) macOS
 
 ### A. Install system dependencies
 
@@ -300,7 +407,7 @@ launchctl start com.discord-music-bot
 
 ---
 
-## 4) Common Issues
+## 5) Common Issues
 
 ### Audio stops after first track / "No track is currently playing"
 
@@ -348,7 +455,7 @@ sudo apt install ffmpeg libopus0 libopus-dev
 
 ---
 
-## 5) Helpful commands
+## 6) Helpful commands
 
 **Check system FFmpeg/Opus (Linux):**
 ```bash
@@ -389,7 +496,7 @@ python -m pytest tests/ -v
 
 ---
 
-## 6) Support
+## 7) Support
 
 - **Issue**: Check `logs/bot.log` for error messages
 - **FFmpeg problems on Linux**: Verify system installation with `ffmpeg -version`
