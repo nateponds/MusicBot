@@ -41,16 +41,16 @@ A slash-command Discord music bot with YouTube and Spotify support, queue manage
 - Clean, consistent embeds
 - Deafens itself by default when joining voice
 - Fully slash-command based, no prefix commands
-- For 24/7 hosting, use `systemd` on Linux or Task Scheduler/NSSM on Windows
+- For 24/7 hosting, use `systemd` or `PM2` on Linux, or Task Scheduler/NSSM on Windows
 
 ## Installation
 
 See [INSTALL.md](INSTALL.md) for full Windows and Linux setup instructions.
 
-**Simplified installation** (no FFmpeg or Opus system dependency needed):
-
-Quick start on Linux:
+Quick start on Linux (Debian/Ubuntu):
 ```bash
+sudo apt update
+sudo apt install -y python3 python3-venv python3-pip git ffmpeg libopus0
 ./install.sh --run
 ```
 
@@ -59,7 +59,7 @@ Quick start on Windows PowerShell:
 PowerShell -ExecutionPolicy Bypass -File install.ps1 -Run
 ```
 
-**Why simplified?** FFmpeg and Opus are now bundled as Python packages (`imageio-ffmpeg` and `opuslib`), so you only need Python 3.11+ installed!
+On Windows, system FFmpeg is preferred when configured, with a validated `imageio-ffmpeg` fallback supported. On Linux, system FFmpeg is preferred; bundled `imageio-ffmpeg` was observed to fail on Ubuntu 24.04 (GLIBC 2.39).
 
 ## Configuration
 
@@ -117,7 +117,7 @@ requirements.txt Python dependencies
 - **Logs** (`logs/bot.log`):
   - Rotating file handler keeps 7 days of logs
   - New log file each day, old ones auto-deleted after 7 days
-- The bot uses `ffmpeg` and Discord voice support, so make sure those system dependencies are installed.
+- On Linux, the bot requires system `ffmpeg` and `libopus` for reliable Discord voice playback.
 - **Spotify Support**: 
   - **Individual tracks** work with any Spotify account (free or premium)
   - **Playlists & Albums** require a PREMIUM Spotify account for direct API access

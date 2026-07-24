@@ -32,9 +32,12 @@ class MusicEmbedManager:
         current_time: int = 0,
         queue_size: int = 0,
         loop_mode: int = 0,
+        playback_state: Optional[str] = None,
     ) -> discord.Embed:
         """Create a now playing embed with clear fields and consistent styling."""
-        if not track:
+        state_str = str(playback_state.value if hasattr(playback_state, "value") else (playback_state or "playing")).lower()
+
+        if not track or state_str == "idle":
             embed = discord.Embed(
                 title="🎵 Now Playing",
                 description="No track is currently playing.",
@@ -44,10 +47,17 @@ class MusicEmbedManager:
             embed.set_footer(text="Discord Music Bot")
             return embed
 
-        loop_text = ["No Loop", "Track Repeat", "Queue Repeat"][loop_mode]
+        loop_text = {
+            0: "No Loop",
+            1: "Track Repeat",
+            2: "Queue Repeat",
+        }.get(loop_mode, "Unknown")
+
+        source_val = getattr(track, 'source', None)
+        source_str = str(source_val if source_val is not None else "unknown").capitalize()
 
         embed = discord.Embed(
-            title=f"🎵 Now Playing",
+            title="🎵 Now Playing",
             description=f"**{track.title}**\nby *{track.artist or 'Unknown'}*",
             color=PRIMARY_COLOR,
             url=getattr(track, 'url', None),
@@ -56,11 +66,12 @@ class MusicEmbedManager:
         if getattr(track, 'thumbnail', None):
             embed.set_thumbnail(url=track.thumbnail)
 
+        embed.add_field(name="Status", value=state_str.title(), inline=True)
         embed.add_field(name="Duration", value=_format_duration(track.duration), inline=True)
         embed.add_field(name="Position", value=str(queue_size), inline=True)
         embed.add_field(name="Progress", value=f"{_format_duration(current_time)} / {_format_duration(track.duration)}", inline=False)
         embed.add_field(name="Loop", value=loop_text, inline=True)
-        embed.add_field(name="Source", value=getattr(track, 'source', 'unknown').capitalize(), inline=True)
+        embed.add_field(name="Source", value=source_str, inline=True)
         embed.add_field(name="Added by", value=getattr(track, 'added_by_name', 'Unknown'), inline=True)
 
         embed.set_footer(text="Discord Music Bot | Multi-source player")

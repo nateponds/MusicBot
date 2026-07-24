@@ -6,14 +6,15 @@ This guide covers final, tested steps to install and run the Discord Music Bot o
 
 ## ⚠️ CRITICAL: FFmpeg Requirement on Linux
 
-**Linux users MUST install system FFmpeg and Opus.** The bundled `imageio-ffmpeg` fails on modern Linux glibc systems (Ubuntu 24.04+, GLIBC 2.39+) with **FFmpeg exit code -11 (SIGSEGV)**, causing audio playback to fail.
+**Linux users SHOULD use system FFmpeg.** The bundled `imageio-ffmpeg` was observed to fail on Ubuntu 24.04 (GLIBC 2.39) with **FFmpeg exit code -11 (SIGSEGV)**, causing audio playback to fail.
 
 **Install on Linux:**
-```bash
-sudo apt update && sudo apt install -y ffmpeg libopus0 libopus-dev
-```
+- Debian/Ubuntu runtime: `sudo apt update && sudo apt install -y ffmpeg libopus0`
+- Fedora runtime: `sudo dnf install -y ffmpeg-free opus`
+- RHEL/Rocky/Alma runtime: enable a repository providing `ffmpeg-free`, then install and capability-test it.
 
-**Windows & macOS**: Bundled packages are fine; no system installation needed.
+**Windows**: System FFmpeg is preferred when configured; validated `imageio-ffmpeg` fallback is supported.
+**macOS**: Install FFmpeg and Opus with Homebrew as shown in the macOS section.
 
 ---
 
@@ -21,26 +22,7 @@ sudo apt update && sudo apt install -y ffmpeg libopus0 libopus-dev
 - **Linux**: `./install.sh` (checks for system FFmpeg), then `sudo ./install.sh --systemd` for persistent service.
 - **Windows**: `.\install.ps1 -Run` for quick testing, or `.\install.ps1` to set up with Task Scheduler.
 - **Python**: 3.11+ required on all platforms.
-
----
-
-## Prerequisites
-
-### All Platforms
-- **Python 3.11+** installed and on PATH
-- A Discord application bot token (from [Discord Developer Portal](https://discord.com/developers/applications))
-- Git (optional, for cloning; you can also download ZIP)
-
-### Linux Only
-- **FFmpeg and Opus system libraries** (REQUIRED for audio playback):
-  - Debian/Ubuntu: `sudo apt install ffmpeg libopus0 libopus-dev`
-  - Fedora/RHEL: `sudo dnf install ffmpeg opus-devel`
-  - Alpine: `sudo apk add ffmpeg opus-dev`
-
----
-
-## Files to know
-- `index.py` — main bot launcher
+- **Python audio packages**: `imageio-ffmpeg` supplies an FFmpeg fallback;
 - `requirements.txt` — Python dependencies
 - `install.sh` — Linux installer (creates `venv`, checks for system FFmpeg)
 - `install.ps1` — Windows installer (creates `venv`)
@@ -55,7 +37,7 @@ sudo apt update && sudo apt install -y ffmpeg libopus0 libopus-dev
 
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-venv python3-pip git ffmpeg libopus0 libopus-dev
+sudo apt install -y python3 python3-venv python3-pip git ffmpeg libopus0
 ```
 
 **Verify installation:**
@@ -104,7 +86,9 @@ python index.py
 
 Press `Ctrl+C` to stop.
 
-### E. Make it persistent with systemd (recommended for 24/7)
+### E. Make it persistent with systemd or PM2 (recommended for 24/7)
+
+#### Option 1: systemd (System-level service, requires root)
 
 ```bash
 sudo ./install.sh --systemd
@@ -117,19 +101,39 @@ sudo systemctl enable discord-music-bot
 sudo journalctl -u discord-music-bot -f
 ```
 
-**Restart/Stop:**
+**Restart / Stop / Status:**
 ```bash
 sudo systemctl restart discord-music-bot
 sudo systemctl stop discord-music-bot
 sudo systemctl status discord-music-bot
 ```
 
+#### Option 2: PM2 (User-level process manager, no root required)
+
+If PM2 is installed on your system (`npm install -g pm2`), you can manage the bot without requiring root or sudo privileges:
+
+```bash
+# Start the bot using PM2 with the virtualenv Python interpreter:
+pm2 start /path/to/MusicBot/venv/bin/python --name musicbot -- /path/to/MusicBot/index.py
+
+# View status and live logs:
+pm2 status
+pm2 logs musicbot
+
+# Restart or stop:
+pm2 restart musicbot
+pm2 stop musicbot
+
+# Save PM2 process list to persist across server reboots:
+pm2 save
+```
+
 ### F. Troubleshooting on Linux
 
 **Audio not playing / FFmpeg exit code -11?**
 - System FFmpeg installed? `ffmpeg -version`
-- Bundled imageio-ffmpeg is NOT compatible. Use system FFmpeg.
-- Fix: `sudo apt install ffmpeg libopus0 libopus-dev`
+- Bundled imageio-ffmpeg fallback was observed to fail on Ubuntu 24.04. Use system FFmpeg.
+- Fix: `sudo apt install ffmpeg libopus0`
 
 **FFmpeg or Opus not found?**
 ```bash
@@ -141,7 +145,7 @@ ldconfig -p | grep libopus
 ```
 
 **"FFmpeg is required" error at startup?**
-- Reinstall system packages: `sudo apt install ffmpeg libopus0 libopus-dev`
+- Reinstall system packages: `sudo apt install ffmpeg libopus0`
 
 **Logs and monitoring:**
 ```bash
@@ -165,6 +169,9 @@ sudo journalctl -u discord-music-bot -n 50 --no-pager
 ### A. Install Python
 
 Install Python 3.11+ from [python.org](https://python.org). **Ensure "Add Python to PATH" is checked during installation.**
+
+The Python requirements provide a bundled FFmpeg fallback, so a separate
+FFmpeg installation is normally unnecessary on Windows.
 
 **Verify:**
 ```powershell
@@ -415,7 +422,7 @@ launchctl start com.discord-music-bot
 
 **Fix on Linux**:
 ```bash
-sudo apt install ffmpeg libopus0 libopus-dev
+sudo apt install ffmpeg libopus0
 ```
 
 **Fix on Windows/macOS**: Reinstall FFmpeg via Homebrew or direct download.
@@ -436,14 +443,12 @@ brew install ffmpeg
 
 ### Bot crashes with "exit code -11"
 
-This is a segmentation fault from the bundled FFmpeg on Linux.
+On Ubuntu 24.04, the bundled imageio-ffmpeg fallback was observed to exit with code -11 (SIGSEGV).
 
 **Linux fix:**
+Install system FFmpeg:
 ```bash
-# Remove bundled FFmpeg package (if any)
-pip uninstall imageio-ffmpeg
-# Install system FFmpeg
-sudo apt install ffmpeg libopus0 libopus-dev
+sudo apt install ffmpeg libopus0
 ```
 
 ### Slash commands not appearing in Discord
@@ -468,6 +473,9 @@ ldconfig -p | grep libopus
 # Linux (systemd)
 sudo journalctl -u discord-music-bot -f
 
+# PM2
+pm2 logs musicbot
+
 # Linux (terminal)
 tail -f logs/bot.log
 
@@ -475,15 +483,22 @@ tail -f logs/bot.log
 Get-Content .\logs\bot.log -Wait
 ```
 
-**Restart bot (Linux systemd):**
+**Restart bot:**
 ```bash
+# Linux systemd
 sudo systemctl restart discord-music-bot
+
+# PM2
+pm2 restart musicbot
 ```
 
 **Stop bot:**
 ```bash
 # Linux systemd
 sudo systemctl stop discord-music-bot
+
+# PM2
+pm2 stop musicbot
 
 # Any: Ctrl+C in terminal
 ```

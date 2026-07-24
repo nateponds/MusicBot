@@ -1,0 +1,107 @@
+name: Audio Compatibility Matrix
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  unit-tests:
+    name: Unit Tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04, windows-latest]
+        python-version: ['3.11', '3.12']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Validate installer script syntax
+        if: runner.os == 'Linux'
+        run: bash -n install.sh
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run unit test suite
+        run: |
+          python -m pytest -q -m "not system"
+
+  linux-system-tests:
+    name: Linux System FFmpeg Probe (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libopus0
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run system capability test
+        run: |
+          python -m pytest -q -m system
+
+  debian-system-tests:
+    name: Debian 12 System FFmpeg Probe
+    runs-on: ubuntu-latest
+    container:
+      image: debian:bookworm-slim
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y python3 python3-pip python3-venv ffmpeg libopus0
+          python3 -m venv venv
+          ./venv/bin/pip install -r requirements.txt
+
+      - name: Run unit and system capability tests
+        run: |
+          ./venv/bin/python -m pytest -q
+
+  fedora-system-tests:
+    name: Fedora 43 System FFmpeg Probe
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:43
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          dnf install -y python3 python3-pip ffmpeg-free opus
+          python3 -m venv venv
+          ./venv/bin/pip install -r requirements.txt
+
+      - name: Run system capability test
+        run: |
+          ./venv/bin/python -m pytest -q -m system

@@ -10,7 +10,7 @@ import asyncio
 @dataclass
 class Track:
     """Represents a single track in the queue"""
-    
+
     title: str
     url: str
     duration: int  # in seconds
@@ -21,35 +21,35 @@ class Track:
     added_by_name: str = "Unknown"
     added_at: datetime = field(default_factory=datetime.now)
     platform_badge: str = "🎵"  # YouTube or Spotify icon
-    
+
     def __repr__(self) -> str:
         return f"Track(title={self.title}, artist={self.artist}, source={self.source})"
 
 
 class Queue:
     """Manages the music queue"""
-    
+
     def __init__(self, max_size: int = 1000):
         self.tracks: List[Track] = []
         self.current_index: int = -1
         self.max_size = max_size
         self.loop_mode = 0  # 0: Off, 1: Track Repeat, 2: Queue Repeat
         self._lock = asyncio.Lock()
-    
+
     async def add(self, track: Track) -> None:
         """Add track to queue"""
         async with self._lock:
             if len(self.tracks) >= self.max_size:
                 raise ValueError(f"Queue is full (max {self.max_size})")
             self.tracks.append(track)
-    
+
     async def add_multiple(self, tracks: List[Track]) -> None:
         """Add multiple tracks to queue"""
         async with self._lock:
             if len(self.tracks) + len(tracks) > self.max_size:
                 raise ValueError(f"Adding tracks would exceed max queue size")
             self.tracks.extend(tracks)
-    
+
     async def remove(self, index: int) -> Optional[Track]:
         """Remove track at index"""
         async with self._lock:
@@ -59,13 +59,13 @@ class Queue:
                     self.current_index -= 1
                 return track
         return None
-    
+
     async def clear(self) -> None:
         """Clear entire queue"""
         async with self._lock:
             self.tracks.clear()
             self.current_index = -1
-    
+
     async def shuffle(self) -> None:
         """Shuffle queue"""
         import random
@@ -79,7 +79,7 @@ class Queue:
                     self.tracks = remaining[:self.current_index] + [current] + remaining[self.current_index:]
                 else:
                     random.shuffle(self.tracks)
-    
+
     async def move(self, from_index: int, to_index: int) -> bool:
         """Move track from one position to another"""
         async with self._lock:
@@ -88,25 +88,36 @@ class Queue:
                 self.tracks.insert(to_index, track)
                 return True
         return False
-    
+
     async def get_current(self) -> Optional[Track]:
         """Get current playing track"""
         async with self._lock:
             if 0 <= self.current_index < len(self.tracks):
                 return self.tracks[self.current_index]
         return None
-    
-    async def get_next(self) -> Optional[Track]:
+
+    async def get_next(self, skip_track_repeat: bool = False) -> Optional[Track]:
         """Get next track"""
         async with self._lock:
+            if not self.tracks:
+                return None
+
             if self.loop_mode == 1:  # Track repeat
-                if 0 <= self.current_index < len(self.tracks):
-                    return self.tracks[self.current_index]
-            elif self.loop_mode == 2:  # Queue repeat
-                if self.current_index + 1 >= len(self.tracks):
-                    if len(self.tracks) > 0:
+                if not skip_track_repeat:
+                    if self.current_index < 0:
                         self.current_index = 0
-                        return self.tracks[0]
+                    if 0 <= self.current_index < len(self.tracks):
+                        return self.tracks[self.current_index]
+                    return None
+                else:
+                    if self.current_index + 1 < len(self.tracks):
+                        self.current_index += 1
+                        return self.tracks[self.current_index]
+                    return None
+            elif self.loop_mode == 2:  # Queue repeat
+                if self.current_index < 0 or self.current_index + 1 >= len(self.tracks):
+                    self.current_index = 0
+                    return self.tracks[0]
                 else:
                     self.current_index += 1
                     return self.tracks[self.current_index]
@@ -116,13 +127,17 @@ class Queue:
                     return self.tracks[self.current_index]
         return None
 
-    async def peek_next(self) -> Optional[Track]:
-        """Peek the next track without moving queue state"""
+    async def peek_next(self, skip_track_repeat: bool = False) -> Optional[Track]:
+        """Peek the next track without moving queue state.
+
+        skip_track_repeat previews the track that get_next(skip_track_repeat=True)
+        would return, so /skip can see past a track-repeat loop.
+        """
         async with self._lock:
-            if self.loop_mode == 1:  # Track repeat
+            if self.loop_mode == 1 and not skip_track_repeat:  # Track repeat
                 if 0 <= self.current_index < len(self.tracks):
                     return self.tracks[self.current_index]
-            elif self.loop_mode == 2:  # Queue repeat
+            elif self.loop_mode == 2 and not skip_track_repeat:  # Queue repeat
                 if self.current_index + 1 >= len(self.tracks):
                     if len(self.tracks) > 0:
                         return self.tracks[0]
@@ -145,7 +160,7 @@ class Queue:
             if 0 <= target_index < len(self.tracks):
                 return self.tracks[target_index]
         return None
-    
+
     async def get_previous(self) -> Optional[Track]:
         """Get previous track"""
         async with self._lock:
@@ -153,7 +168,7 @@ class Queue:
                 self.current_index -= 1
                 return self.tracks[self.current_index]
         return None
-    
+
     async def skip(self) -> Optional[Track]:
         """Skip current track and get next"""
         async with self._lock:
@@ -164,21 +179,21 @@ class Queue:
                 self.current_index = 0
                 return self.tracks[0]
         return None
-    
+
     def set_loop_mode(self, mode: int) -> None:
         """Set loop mode (0: Off, 1: Track, 2: Queue)"""
         self.loop_mode = max(0, min(2, mode))
-    
+
     def toggle_loop(self) -> int:
         """Toggle loop mode and return new mode"""
         self.loop_mode = (self.loop_mode + 1) % 3
         return self.loop_mode
-    
+
     async def get_all(self) -> List[Track]:
         """Get all tracks in queue"""
         async with self._lock:
             return self.tracks.copy()
-    
+
     async def get_queue_info(self) -> dict:
         """Get queue information"""
         async with self._lock:
@@ -189,7 +204,7 @@ class Queue:
                 "total_duration": total_duration,
                 "loop_mode": self.loop_mode,
             }
-    
+
     async def size(self) -> int:
         """Get queue size"""
         async with self._lock:

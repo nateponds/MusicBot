@@ -153,6 +153,7 @@ class PlayCommand:
                 return
 
             player = music_player.get_player(interaction.guild_id)
+            player.set_notification_channel(interaction.channel)
 
             # Connect to voice channel if not already connected
             if not player.voice_client:

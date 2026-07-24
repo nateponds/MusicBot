@@ -39,6 +39,7 @@ class Config:
     # Bot Settings
     DEFAULT_VOLUME = int(os.getenv("DEFAULT_VOLUME", "50"))
     DEFAULT_LANGUAGE = os.getenv("DEFAULT_LANGUAGE", "en")
+    FFMPEG_EXECUTABLE = os.getenv("FFMPEG_EXECUTABLE") or None
     
     PRIMARY_SOURCE = os.getenv("PRIMARY_SOURCE", "youtube").lower()
     SUPPORTED_SOURCES = [
