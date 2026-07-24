@@ -374,12 +374,37 @@ class GuildPlayer:
                     if generation != self._generation:
                         return
 
+                    # ponytail: append-mode stderr log per process; ffmpeg's own
+                    # reconnect/underrun/403 complaints land here for `grep`.
+                    # Rotate manually if it grows; upgrade to logging handler if noisy.
+                    ffmpeg_log = open("ffmpeg-stream.log", "a", buffering=1)
+                    ffmpeg_log.write(
+                        f"\n=== guild {self.guild_id} track '{next_track.title}' ===\n"
+                    )
                     source = await discord.FFmpegOpusAudio.from_probe(
                         stream_url,
                         method="fallback",
-                        before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+                        before_options=(
+                            "-reconnect 1 -reconnect_streamed 1 "
+                            "-reconnect_on_network_error 1 -reconnect_on_http_error 4xx,5xx "
+                            "-reconnect_delay_max 5 "
+                            "-rw_timeout 15000000"
+                        ),
                         executable=ffmpeg_path,
+                        stderr=ffmpeg_log,
                     )
+                    # ponytail: close the log fd when this source is cleaned up,
+                    # else one fd leaks per track. Wrap the existing cleanup.
+                    _orig_cleanup = source.cleanup
+                    def _cleanup_with_log(_orig=_orig_cleanup, _fh=ffmpeg_log):
+                        try:
+                            _orig()
+                        finally:
+                            try:
+                                _fh.close()
+                            except Exception:
+                                pass
+                    source.cleanup = _cleanup_with_log
                 except asyncio.CancelledError:
                     if source:
                         try:

@@ -211,19 +211,28 @@ class UtilityCommands:
     @staticmethod
     async def ping(interaction: discord.Interaction, bot):
         """Check bot latency"""
-        await interaction.response.defer()
-        
         try:
-            # Measure websocket latency
-            ws_latency = round(bot.latency * 1000)
-            
-            embed = MusicEmbedManager.create_info_embed(
-                "🏓 Pong!",
-                f"Websocket latency: **{ws_latency}ms**"
+            # Real API round-trip: time from sending the reply to it landing.
+            # Reflects felt latency; bot.latency is the gateway heartbeat (stale,
+            # quantized to the ~41s heartbeat interval), so we show both.
+            start = time.perf_counter()
+            await interaction.response.send_message(
+                embed=MusicEmbedManager.create_info_embed("🏓 Pong!", "measuring…")
             )
-            
-            await interaction.followup.send(embed=embed)
-        
+            rtt_latency = round((time.perf_counter() - start) * 1000)
+            ws_latency = round(bot.latency * 1000)
+
+            await interaction.edit_original_response(
+                embed=MusicEmbedManager.create_info_embed(
+                    "🏓 Pong!",
+                    f"Heartbeat (WS): **{ws_latency}ms**\n"
+                    f"Round-trip (API): **{rtt_latency}ms**"
+                )
+            )
+
         except Exception as e:
             embed = MusicEmbedManager.create_error_embed(f"Error: {str(e)}")
-            await interaction.followup.send(embed=embed)
+            if interaction.response.is_done():
+                await interaction.followup.send(embed=embed)
+            else:
+                await interaction.response.send_message(embed=embed)
