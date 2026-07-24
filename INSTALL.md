@@ -86,7 +86,9 @@ python index.py
 
 Press `Ctrl+C` to stop.
 
-### E. Make it persistent with systemd (recommended for 24/7)
+### E. Make it persistent with systemd or PM2 (recommended for 24/7)
+
+#### Option 1: systemd (System-level service, requires root)
 
 ```bash
 sudo ./install.sh --systemd
@@ -99,11 +101,31 @@ sudo systemctl enable discord-music-bot
 sudo journalctl -u discord-music-bot -f
 ```
 
-**Restart/Stop:**
+**Restart / Stop / Status:**
 ```bash
 sudo systemctl restart discord-music-bot
 sudo systemctl stop discord-music-bot
 sudo systemctl status discord-music-bot
+```
+
+#### Option 2: PM2 (User-level process manager, no root required)
+
+If PM2 is installed on your system (`npm install -g pm2`), you can manage the bot without requiring root or sudo privileges:
+
+```bash
+# Start the bot using PM2 with the virtualenv Python interpreter:
+pm2 start /path/to/MusicBot/venv/bin/python --name musicbot -- /path/to/MusicBot/index.py
+
+# View status and live logs:
+pm2 status
+pm2 logs musicbot
+
+# Restart or stop:
+pm2 restart musicbot
+pm2 stop musicbot
+
+# Save PM2 process list to persist across server reboots:
+pm2 save
 ```
 
 ### F. Troubleshooting on Linux
@@ -344,6 +366,9 @@ ldconfig -p | grep libopus
 # Linux (systemd)
 sudo journalctl -u discord-music-bot -f
 
+# PM2
+pm2 logs musicbot
+
 # Linux (terminal)
 tail -f logs/bot.log
 
@@ -351,15 +376,22 @@ tail -f logs/bot.log
 Get-Content .\logs\bot.log -Wait
 ```
 
-**Restart bot (Linux systemd):**
+**Restart bot:**
 ```bash
+# Linux systemd
 sudo systemctl restart discord-music-bot
+
+# PM2
+pm2 restart musicbot
 ```
 
 **Stop bot:**
 ```bash
 # Linux systemd
 sudo systemctl stop discord-music-bot
+
+# PM2
+pm2 stop musicbot
 
 # Any: Ctrl+C in terminal
 ```
