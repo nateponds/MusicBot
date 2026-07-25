@@ -248,7 +248,7 @@ class PlayCommand:
 
                     resolved_tracks = []
                     for track in tracks:
-                        yt_track = await PlayCommand._resolve_youtube_audio(music_player, track.title, track.artist)
+                        yt_track = await PlayCommand._resolve_youtube_audio(music_player, track.title, track.artist, track.duration or 0)
                         if yt_track:
                             PlayCommand._merge_resolved(track, yt_track)
                             resolved_tracks.append(track)
@@ -286,7 +286,7 @@ class PlayCommand:
 
                     resolved_tracks = []
                     for track in tracks:
-                        yt_track = await PlayCommand._resolve_youtube_audio(music_player, track.title, track.artist)
+                        yt_track = await PlayCommand._resolve_youtube_audio(music_player, track.title, track.artist, track.duration or 0)
                         if yt_track:
                             PlayCommand._merge_resolved(track, yt_track)
                             resolved_tracks.append(track)

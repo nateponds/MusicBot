@@ -23,16 +23,22 @@ class NowPlayingManager:
         channel: discord.TextChannel, 
         track: Track,
         position: int = 0,
-        duration: int = 0
+        duration: int = 0,
+        queue_size: int = 0,
+        loop_mode: int = 0,
+        playback_state=None,
     ) -> Optional[discord.Message]:
         """Send/update Now Playing message in channel
-        
+
         Args:
             channel: Text channel to post in
             track: Current track
             position: Current playback position in seconds
             duration: Total track duration in seconds
-        
+            queue_size: Number of tracks in the queue
+            loop_mode: Active loop mode (0/1/2)
+            playback_state: Real playback state; defaults to "playing" when unknown
+
         Returns:
             Sent message or None if failed
         """
@@ -40,12 +46,11 @@ class NowPlayingManager:
             embed = MusicEmbedManager.create_now_playing_embed(
                 track,
                 current_time=position,
-                queue_size=0,
-                loop_mode=0,
-                playback_state="playing"
+                queue_size=queue_size,
+                loop_mode=loop_mode,
+                playback_state=playback_state,
             )
-            embed.add_field(name="Requested by", value=getattr(track, 'added_by_name', 'Unknown'), inline=True)
-            
+
             # Send message
             message = await channel.send(embed=embed)
             
@@ -71,16 +76,22 @@ class NowPlayingManager:
         guild: discord.Guild,
         track: Track,
         position: int = 0,
-        duration: int = 0
+        duration: int = 0,
+        queue_size: int = 0,
+        loop_mode: int = 0,
+        playback_state=None,
     ) -> bool:
         """Update existing Now Playing message
-        
+
         Args:
             guild: Guild to update message in
             track: Current track
             position: Current playback position
             duration: Total duration
-        
+            queue_size: Number of tracks in the queue
+            loop_mode: Active loop mode (0/1/2)
+            playback_state: Real playback state; defaults to "playing" when unknown
+
         Returns:
             True if updated, False if failed
         """
@@ -103,12 +114,11 @@ class NowPlayingManager:
                 embed = MusicEmbedManager.create_now_playing_embed(
                     track,
                     current_time=position,
-                    queue_size=0,
-                    loop_mode=0,
-                    playback_state="playing"
+                    queue_size=queue_size,
+                    loop_mode=loop_mode,
+                    playback_state=playback_state,
                 )
-                embed.add_field(name="Requested by", value=getattr(track, 'added_by_name', 'Unknown'), inline=True)
-                
+
                 await message.edit(embed=embed)
                 logger.debug(f"Updated Now Playing for guild {guild.id}")
                 return True

@@ -72,6 +72,7 @@ class MusicEmbedManager:
         embed.add_field(name="Progress", value=f"{_format_duration(current_time)} / {_format_duration(track.duration)}", inline=False)
         embed.add_field(name="Loop", value=loop_text, inline=True)
         embed.add_field(name="Source", value=source_str, inline=True)
+        embed.add_field(name="Added by", value=getattr(track, 'added_by_name', 'Unknown'), inline=True)
 
         embed.set_footer(text="Discord Music Bot | Multi-source player")
         embed.timestamp = datetime.now()

@@ -296,6 +296,7 @@ class GuildPlayer:
         self._generation = 0
         self._notification_channel = None
         self._elapsed_before_pause: float = 0.0
+        self._play_start_ts: Optional[float] = None
 
     @property
     def is_playing(self) -> bool:
@@ -321,11 +322,20 @@ class GuildPlayer:
             
             # ponytail: wall-clock position drifts on network stalls; upgrade path is FFmpeg -progress pipe
             dur = getattr(self.current_track, "duration", 0) or 0
-            if self._state == PlaybackState.PLAYING and hasattr(self, "_play_start_ts"):
-                pos = getattr(self, "_elapsed_before_pause", 0.0) + (time.monotonic() - self._play_start_ts)
+            # RECOVERING still has audio flowing (reconnect), so the clock must keep running.
+            # ponytail: no track == no position; avoids leaking a stale elapsed value after
+            # the many stop/skip/idle paths that reset current_track without touching the clock.
+            if self.current_track is None:
+                pos = 0.0
             else:
-                pos = getattr(self, "_elapsed_before_pause", 0.0)
-                
+                pos = self._elapsed_before_pause
+                if self._play_start_ts is not None and self._state in {
+                    PlaybackState.PLAYING,
+                    PlaybackState.RECOVERING,
+                }:
+                    pos += time.monotonic() - self._play_start_ts
+
+
             if dur > 0:
                 pos = min(pos, float(dur))
                 
@@ -607,8 +617,9 @@ class GuildPlayer:
         async with self._state_lock:
             if self.voice_client and self.voice_client.is_playing() and self._state is PlaybackState.PLAYING:
                 self.voice_client.pause()
-                if hasattr(self, "_play_start_ts"):
+                if self._play_start_ts is not None:
                     self._elapsed_before_pause += time.monotonic() - self._play_start_ts
+                    self._play_start_ts = None
                 self._state = PlaybackState.PAUSED
                 return True
             return False

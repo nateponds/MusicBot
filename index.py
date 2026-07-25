@@ -8,6 +8,7 @@ import logging
 import os
 import shutil
 from pathlib import Path
+from typing import Optional
 from config import Config
 from src.player import MusicPlayer, resolve_ffmpeg
 from src.logger import setup_logging, get_logger
@@ -134,8 +135,13 @@ class MusicBot(commands.Cog):
         await QueueCommands.shuffle(interaction, self.music_player)
     
     @discord.app_commands.command(name="loop", description="Toggle loop mode")
-    @discord.app_commands.describe(mode="0=Off, 1=Track, 2=Queue")
-    async def loop(self, interaction: discord.Interaction, mode: int = None):
+    @discord.app_commands.describe(mode="Pick a mode explicitly, or omit to cycle")
+    @discord.app_commands.choices(mode=[
+        discord.app_commands.Choice(name="Off", value=0),
+        discord.app_commands.Choice(name="Track Repeat", value=1),
+        discord.app_commands.Choice(name="Queue Repeat", value=2),
+    ])
+    async def loop(self, interaction: discord.Interaction, mode: Optional[int] = None):
         """Loop command"""
         await QueueCommands.loop(interaction, self.music_player, mode)
     

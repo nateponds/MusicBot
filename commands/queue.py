@@ -269,7 +269,9 @@ class QueueCommands:
             player = music_player.get_player(interaction.guild_id)
             if mode is not None:
                 player.queue.set_loop_mode(mode)
-                new_mode = mode
+                # Read back the clamped value; set_loop_mode bounds to 0-2, so trusting
+                # the raw input here would index mode_names out of range.
+                new_mode = player.queue.loop_mode
             else:
                 new_mode = player.queue.toggle_loop()
             

@@ -44,7 +44,10 @@ class UtilityCommands:
                     interaction.channel,
                     track,
                     position=int(snapshot.position),
-                    duration=track.duration
+                    duration=track.duration,
+                    queue_size=snapshot.queue_size,
+                    loop_mode=snapshot.loop_mode,
+                    playback_state=snapshot.state,
                 )
                 
                 if message:
