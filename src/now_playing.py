@@ -37,37 +37,13 @@ class NowPlayingManager:
             Sent message or None if failed
         """
         try:
-            # Create embed
-            embed = discord.Embed(
-                title="🎵 Now Playing",
-                description=f"**{track.title}**",
-                color=discord.Color.blurple()
+            embed = MusicEmbedManager.create_now_playing_embed(
+                track,
+                current_time=position,
+                queue_size=0,
+                loop_mode=0,
+                playback_state="playing"
             )
-            embed.add_field(name="Artist", value=track.artist, inline=False)
-            embed.add_field(name="Source", value=track.platform_badge, inline=True)
-            
-            # Add progress bar if duration available
-            if duration > 0:
-                pos_min, pos_sec = divmod(position, 60)
-                dur_min, dur_sec = divmod(duration, 60)
-                
-                # Create simple progress bar
-                progress_ratio = position / duration if duration > 0 else 0
-                bar_length = 20
-                filled = int(bar_length * progress_ratio)
-                bar = "█" * filled + "░" * (bar_length - filled)
-                
-                embed.add_field(
-                    name="Progress",
-                    value=f"`{bar}` {pos_min}:{pos_sec:02d} / {dur_min}:{dur_sec:02d}",
-                    inline=False
-                )
-            
-            if track.thumbnail:
-                embed.set_thumbnail(url=track.thumbnail)
-            
-            embed.set_footer(text=f"Guild ID: {channel.guild.id}")
-            embed.timestamp = discord.utils.utcnow()
             
             # Send message
             message = await channel.send(embed=embed)
@@ -123,34 +99,13 @@ class NowPlayingManager:
             try:
                 message = await channel.fetch_message(msg_info['message_id'])
                 
-                # Recreate embed
-                embed = discord.Embed(
-                    title="🎵 Now Playing",
-                    description=f"**{track.title}**",
-                    color=discord.Color.blurple()
+                embed = MusicEmbedManager.create_now_playing_embed(
+                    track,
+                    current_time=position,
+                    queue_size=0,
+                    loop_mode=0,
+                    playback_state="playing"
                 )
-                embed.add_field(name="Artist", value=track.artist, inline=False)
-                embed.add_field(name="Source", value=track.platform_badge, inline=True)
-                
-                if duration > 0:
-                    pos_min, pos_sec = divmod(position, 60)
-                    dur_min, dur_sec = divmod(duration, 60)
-                    
-                    progress_ratio = position / duration if duration > 0 else 0
-                    bar_length = 20
-                    filled = int(bar_length * progress_ratio)
-                    bar = "█" * filled + "░" * (bar_length - filled)
-                    
-                    embed.add_field(
-                        name="Progress",
-                        value=f"`{bar}` {pos_min}:{pos_sec:02d} / {dur_min}:{dur_sec:02d}",
-                        inline=False
-                    )
-                
-                if track.thumbnail:
-                    embed.set_thumbnail(url=track.thumbnail)
-                
-                embed.timestamp = discord.utils.utcnow()
                 
                 await message.edit(embed=embed)
                 logger.debug(f"Updated Now Playing for guild {guild.id}")

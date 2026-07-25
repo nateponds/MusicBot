@@ -42,7 +42,7 @@ class UtilityCommands:
                 message = await now_playing_manager.send_now_playing(
                     interaction.channel,
                     track,
-                    position=0,
+                    position=int(snapshot.position),
                     duration=track.duration
                 )
                 
@@ -59,6 +59,7 @@ class UtilityCommands:
                 # Show as inline reply
                 embed = MusicEmbedManager.create_now_playing_embed(
                     track,
+                    current_time=int(snapshot.position),
                     playback_state=snapshot.state,
                     queue_size=snapshot.queue_size,
                     loop_mode=snapshot.loop_mode
