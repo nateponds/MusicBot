@@ -172,6 +172,17 @@ class PlayCommand:
         return score
 
     @staticmethod
+    def _merge_resolved(track: Track, yt_track: Track) -> None:
+        """Merge resolved YouTube track data into the Spotify track."""
+        track.url = yt_track.url
+        track.source = yt_track.source
+        if yt_track.thumbnail:
+            track.thumbnail = yt_track.thumbnail
+        # ponytail: adopt youtube duration if spotify missed it
+        if not track.duration and yt_track.duration:
+            track.duration = yt_track.duration
+
+    @staticmethod
     async def play(
         interaction: discord.Interaction, 
         query: str, 
@@ -239,10 +250,7 @@ class PlayCommand:
                     for track in tracks:
                         yt_track = await PlayCommand._resolve_youtube_audio(music_player, track.title, track.artist)
                         if yt_track:
-                            track.url = yt_track.url
-                            track.source = yt_track.source
-                            if yt_track.thumbnail:
-                                track.thumbnail = yt_track.thumbnail
+                            PlayCommand._merge_resolved(track, yt_track)
                             resolved_tracks.append(track)
 
                     if not resolved_tracks:
@@ -280,10 +288,7 @@ class PlayCommand:
                     for track in tracks:
                         yt_track = await PlayCommand._resolve_youtube_audio(music_player, track.title, track.artist)
                         if yt_track:
-                            track.url = yt_track.url
-                            track.source = yt_track.source
-                            if yt_track.thumbnail:
-                                track.thumbnail = yt_track.thumbnail
+                            PlayCommand._merge_resolved(track, yt_track)
                             resolved_tracks.append(track)
 
                     if not resolved_tracks:
@@ -320,10 +325,7 @@ class PlayCommand:
                             await interaction.followup.send(embed=embed)
                             return
 
-                        track.url = yt_track.url
-                        track.source = yt_track.source
-                        if yt_track.thumbnail:
-                            track.thumbnail = yt_track.thumbnail
+                        PlayCommand._merge_resolved(track, yt_track)
 
                         await player.queue.add(track)
 
