@@ -134,9 +134,10 @@ class MusicBot(commands.Cog):
         await QueueCommands.shuffle(interaction, self.music_player)
     
     @discord.app_commands.command(name="loop", description="Toggle loop mode")
-    async def loop(self, interaction: discord.Interaction):
+    @discord.app_commands.describe(mode="0=Off, 1=Track, 2=Queue")
+    async def loop(self, interaction: discord.Interaction, mode: int = None):
         """Loop command"""
-        await QueueCommands.loop(interaction, self.music_player)
+        await QueueCommands.loop(interaction, self.music_player, mode)
     
     @discord.app_commands.command(name="move", description="Reorder tracks in queue")
     @discord.app_commands.describe(
@@ -168,14 +169,16 @@ class MusicBot(commands.Cog):
     
     # Utility Commands
     @discord.app_commands.command(name="np", description="Show currently playing track")
-    async def now_playing(self, interaction: discord.Interaction):
+    @discord.app_commands.describe(announce="Post to channel and auto-update (True) or show as reply (False)")
+    async def now_playing(self, interaction: discord.Interaction, announce: bool = False):
         """Now playing command"""
-        await UtilityCommands.now_playing(interaction, self.music_player)
+        await UtilityCommands.now_playing(interaction, self.music_player, announce)
     
     @discord.app_commands.command(name="nowplaying", description="Show currently playing track (alias for /np)")
-    async def now_playing_alias(self, interaction: discord.Interaction):
+    @discord.app_commands.describe(announce="Post to channel and auto-update (True) or show as reply (False)")
+    async def now_playing_alias(self, interaction: discord.Interaction, announce: bool = False):
         """Alias for /np command"""
-        await UtilityCommands.now_playing(interaction, self.music_player)
+        await UtilityCommands.now_playing(interaction, self.music_player, announce)
     
     @discord.app_commands.command(name="join", description="Join your voice channel")
     async def join(self, interaction: discord.Interaction):

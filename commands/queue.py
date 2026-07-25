@@ -261,13 +261,17 @@ class QueueCommands:
             await interaction.followup.send(embed=embed)
     
     @staticmethod
-    async def loop(interaction: discord.Interaction, music_player):
+    async def loop(interaction: discord.Interaction, music_player, mode: int = None):
         """Toggle loop mode"""
         await interaction.response.defer()
         
         try:
             player = music_player.get_player(interaction.guild_id)
-            new_mode = player.queue.toggle_loop()
+            if mode is not None:
+                player.queue.set_loop_mode(mode)
+                new_mode = mode
+            else:
+                new_mode = player.queue.toggle_loop()
             
             mode_names = ["🔓 Off", "🔂 Track Repeat", "🔁 Queue Repeat"]
             

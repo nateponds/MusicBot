@@ -44,6 +44,7 @@ class NowPlayingManager:
                 loop_mode=0,
                 playback_state="playing"
             )
+            embed.add_field(name="Requested by", value=getattr(track, 'added_by_name', 'Unknown'), inline=True)
             
             # Send message
             message = await channel.send(embed=embed)
@@ -106,6 +107,7 @@ class NowPlayingManager:
                     loop_mode=0,
                     playback_state="playing"
                 )
+                embed.add_field(name="Requested by", value=getattr(track, 'added_by_name', 'Unknown'), inline=True)
                 
                 await message.edit(embed=embed)
                 logger.debug(f"Updated Now Playing for guild {guild.id}")

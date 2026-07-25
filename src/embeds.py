@@ -13,8 +13,8 @@ INFO_COLOR = discord.Color.blue()
 
 
 def _format_duration(seconds: int) -> str:
-    if seconds is None:
-        return "0:00"
+    if not seconds:
+        return "—"
     seconds = int(seconds)
     hrs, rem = divmod(seconds, 3600)
     mins, secs = divmod(rem, 60)
@@ -72,7 +72,6 @@ class MusicEmbedManager:
         embed.add_field(name="Progress", value=f"{_format_duration(current_time)} / {_format_duration(track.duration)}", inline=False)
         embed.add_field(name="Loop", value=loop_text, inline=True)
         embed.add_field(name="Source", value=source_str, inline=True)
-        embed.add_field(name="Added by", value=getattr(track, 'added_by_name', 'Unknown'), inline=True)
 
         embed.set_footer(text="Discord Music Bot | Multi-source player")
         embed.timestamp = datetime.now()
