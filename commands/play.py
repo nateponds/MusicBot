@@ -80,14 +80,14 @@ class PlayCommand:
     )
 
     @staticmethod
-    async def _resolve_youtube_audio(music_player, title: str, artist: str) -> Optional[Track]:
+    async def _resolve_youtube_audio(music_player, title: str, artist: str, target_duration: int = 0) -> Optional[Track]:
         """Resolve metadata to the best playable YouTube audio track."""
         search_terms = [title.strip()]
         if artist and artist.strip().lower() not in {"unknown", "none"}:
             search_terms.append(artist.strip())
         search_query = " ".join(term for term in search_terms if term)
 
-        ranked = await PlayCommand._search_and_rank(music_player, search_query, artist)
+        ranked = await PlayCommand._search_and_rank(music_player, search_query, artist, target_duration)
         return ranked[0] if ranked else None
 
     @staticmethod
@@ -311,12 +311,21 @@ class PlayCommand:
                     # Track or unknown type
                     track = await music_player.spotify.get_track_info(query)
                     if track:
+                        # ponytail: resolve before queueing, pass duration, abort if fail
+                        yt_track = await PlayCommand._resolve_youtube_audio(
+                            music_player, track.title, track.artist, track.duration or 0
+                        )
+                        if not yt_track:
+                            embed = MusicEmbedManager.create_error_embed("Could not resolve playable track from Spotify")
+                            await interaction.followup.send(embed=embed)
+                            return
+
+                        track.url = yt_track.url
+                        track.source = yt_track.source
+                        if yt_track.thumbnail:
+                            track.thumbnail = yt_track.thumbnail
+
                         await player.queue.add(track)
-                        # Search YouTube for the audio
-                        yt_results = await music_player.youtube.search(f"{track.title} {track.artist}")
-                        if yt_results:
-                            yt_track = yt_results[0]
-                            track.url = yt_track.url
 
                         if not player.is_playing:
                             try:
